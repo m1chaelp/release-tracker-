@@ -23,10 +23,11 @@
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
 
-const STORAGE_KEY = "release-tracker-v3";
+const API_URL = "https://script.google.com/macros/s/AKfycbynq8YaWYZjhNYR1dHsi4tLoA5YKGfif9xcF_xdHbGy91CWJuf0wL4hwY6mEn97769M/exec";
 
 const STATUS_OPTS = [
   { label: "Zakończone",     bg: "#D1FAE5", color: "#065F46", dot: "#10B981", border: "#6EE7B7" },
+  { label: "W toku",         bg: "#E0F2FE", color: "#075985", dot: "#0EA5E9", border: "#7DD3FC" },
   { label: "Nie rozpoczęte", bg: "#FEE2E2", color: "#991B1B", dot: "#EF4444", border: "#FCA5A5" },
   { label: "Wstrzymane",     bg: "#DBEAFE", color: "#1E3A8A", dot: "#3B82F6", border: "#93C5FD" },
   { label: "Do wyjaśnienia", bg: "#FEF9C3", color: "#854D0E", dot: "#EAB308", border: "#FDE047" },
@@ -63,12 +64,24 @@ const defaultSheets = [
       { id: "col_be",    name: "Status Backend",  type: "status", options: STATUS_OPTS },
       { id: "col_fe",    name: "Status Frontend", type: "status", options: STATUS_OPTS },
       { id: "col_testy", name: "Testy",           type: "test"   },
-      { id: "col_kom",   name: "Komentarz",       type: "text"   },
+      { id: "col_kom",   name: "Komentarz",       type: "text",   comment: true },
     ],
     rows: [
-      { id: mkId(), col_opis: "Autoryzacja JWT",      col_task: "PROJ-101", col_be: "Zakończone",     col_fe: "Wstrzymane",     col_testy: { state: "pass",     note: "Wszystkie case'y zielone" }, col_kom: "" },
-      { id: mkId(), col_opis: "Panel użytkownika",    col_task: "PROJ-102", col_be: "Nie rozpoczęte", col_fe: "Nie rozpoczęte", col_testy: { state: "untested", note: "" },                         col_kom: "" },
-      { id: mkId(), col_opis: "Integracja płatności", col_task: "PROJ-103", col_be: "Do wyjaśnienia", col_fe: "Nie rozpoczęte", col_testy: { state: "fail",     note: "Błąd przy 3D Secure" },      col_kom: "Czekamy na klucze API" },
+      { id: mkId(), col_opis: "Zwroty",                  col_task: "", col_be: "Zakończone",     col_fe: "W toku",         col_testy: { state: "running", note: "Test zwrot" },              col_kom: "" },
+      { id: mkId(), col_opis: "Generowanie Faktury",     col_task: "", col_be: "W toku",         col_fe: "W toku",         col_testy: { state: "running", note: "Pobieranie właściwej faktury" }, col_kom: "" },
+      { id: mkId(), col_opis: "InPost Pay",              col_task: "", col_be: "Wstrzymane",     col_fe: "Wstrzymane",     col_testy: { state: "untested", note: "" },                        col_kom: "Czekamy na credentials" },
+      { id: mkId(), col_opis: "Pobieranie NIP GUS",      col_task: "", col_be: "Zakończone",     col_fe: "Nie rozpoczęte", col_testy: { state: "untested", note: "" },                        col_kom: "" },
+      { id: mkId(), col_opis: "Usuwanie Konta",          col_task: "", col_be: "Nie rozpoczęte", col_fe: "Nie rozpoczęte", col_testy: { state: "untested", note: "" },                        col_kom: "" },
+      { id: mkId(), col_opis: "Base - konfiguracja",     col_task: "", col_be: "W toku",         col_fe: "W toku",         col_testy: { state: "untested", note: "" },                        col_kom: "" },
+      { id: mkId(), col_opis: "Opłacenie zamówienia",    col_task: "", col_be: "Zakończone",     col_fe: "W toku",         col_testy: { state: "fail",    note: "Poprawka - za pobraniem" }, col_kom: "" },
+      { id: mkId(), col_opis: "Darmowa dostawa",         col_task: "", col_be: "Zakończone",     col_fe: "W toku",         col_testy: { state: "fail",    note: "Poprawka do darmowej dostawy" }, col_kom: "" },
+      { id: mkId(), col_opis: "Opinie/Recenzje",         col_task: "", col_be: "Zakończone",     col_fe: "Nie rozpoczęte", col_testy: { state: "untested", note: "" },                        col_kom: "" },
+      { id: mkId(), col_opis: "Karta produktu",          col_task: "", col_be: "Zakończone",     col_fe: "W toku",         col_testy: { state: "pass",    note: "Ostatnia poprawka na mobile" }, col_kom: "" },
+      { id: mkId(), col_opis: "Kupony rabatowe",         col_task: "", col_be: "Zakończone",     col_fe: "Zakończone",     col_testy: { state: "pass",    note: "" },                        col_kom: "" },
+      { id: mkId(), col_opis: "Auth",                    col_task: "", col_be: "Zakończone",     col_fe: "Zakończone",     col_testy: { state: "pass",    note: "" },                        col_kom: "" },
+      { id: mkId(), col_opis: "Podsumowanie zamówienia", col_task: "", col_be: "Zakończone",     col_fe: "Zakończone",     col_testy: { state: "pass",    note: "" },                        col_kom: "" },
+      { id: mkId(), col_opis: "Listy zakupowe",          col_task: "", col_be: "Zakończone",     col_fe: "Zakończone",     col_testy: { state: "pass",    note: "" },                        col_kom: "" },
+      { id: mkId(), col_opis: "Wyszukiwarka i Homepage", col_task: "", col_be: "Zakończone",     col_fe: "Zakończone",     col_testy: { state: "pass",    note: "" },                        col_kom: "" },
     ]
   },
   {
@@ -78,7 +91,7 @@ const defaultSheets = [
       { id: "col_opis",   name: "Opis",           type: "text"     },
       { id: "col_status", name: "Status",         type: "status",   options: STATUS_OPTS },
       { id: "col_testy",  name: "Testy",          type: "test"     },
-      { id: "col_kom",    name: "Komentarz",      type: "text"     },
+      { id: "col_kom",    name: "Komentarz",      type: "text",    comment: true },
       { id: "col_pokr",   name: "Pokrycie",       type: "checkbox" },
     ],
     rows: [
@@ -90,10 +103,20 @@ const defaultSheets = [
   }
 ];
 
-function loadData() {
-  try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : defaultSheets; } catch { return defaultSheets; }
+async function loadFromSheets() {
+  try {
+    const r = await fetch(API_URL);
+    const text = await r.text();
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : defaultSheets;
+  } catch { return defaultSheets; }
 }
-function saveData(d) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch {} }
+
+async function saveToSheets(data) {
+  try {
+    await fetch(API_URL, { method: "POST", mode: "no-cors", body: JSON.stringify(data) });
+  } catch(e) { console.error("Save error", e); }
+}
 
 // ── TEST CELL ──────────────────────────────────────────────────────────────────
 function TestCell({ value, onChange }) {
@@ -114,47 +137,50 @@ function TestCell({ value, onChange }) {
   }, [open]);
 
   return (
-    <div ref={ref} style={{ position:"relative", userSelect:"none", minWidth:210 }}>
-      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+    <div ref={ref} style={{ position:"relative", userSelect:"none" }}>
+      <div style={{ display:"flex", alignItems:"center" }}>
         <div onClick={toggle} style={{
-          display:"flex", alignItems:"center", gap:6, padding:"5px 10px",
+          display:"flex", alignItems:"center", gap:6, padding:"5px 12px",
           background:state.bg, border:`1.5px solid ${state.border}`,
-          borderRadius:20, cursor:"pointer", flexShrink:0, whiteSpace:"nowrap",
+          borderRadius:20, cursor:"pointer", whiteSpace:"nowrap",
           boxShadow:open?`0 0 0 3px ${state.dot}28`:"none", transition:"box-shadow .15s"
         }}>
-          <span style={{ fontSize:12, fontWeight:900, color:state.dot, lineHeight:1 }}>{state.icon}</span>
-          <span style={{ color:state.color, fontWeight:700, fontSize:11 }}>{state.label}</span>
+          <span style={{ fontSize:13, fontWeight:900, color:state.dot, lineHeight:1 }}>{state.icon}</span>
+          <span style={{ color:state.color, fontWeight:700, fontSize:12 }}>{state.label}</span>
           <span style={{ color:state.color, fontSize:8, opacity:.6, transform:open?"rotate(180deg)":"none", display:"inline-block", transition:"transform .2s" }}>▾</span>
         </div>
-        <input type="text" value={val.note} onChange={e => onChange({ ...val, note:e.target.value })}
-          onClick={e => e.stopPropagation()}
-          placeholder={val.state==="fail"?"Opisz błąd…":val.state==="running"?"np. 3/8 gotowe…":"Notatka…"}
-          style={{ flex:1, minWidth:0, border:"none", background:"transparent", fontSize:12,
-            color:val.note?"#374151":"#CBD5E1", fontFamily:"inherit", padding:"3px 0",
-            borderBottom:`1px dashed ${val.note ? state.dot+"88" : "#E2E8F0"}` }} />
       </div>
       {open && (
         <div style={{
-          position:"absolute", zIndex:999, background:"#fff", borderRadius:14, minWidth:196,
-          boxShadow:"0 12px 40px rgba(0,0,0,.18)", border:"1px solid #F1F5F9", overflow:"hidden", left:0,
-          ...(up?{bottom:"calc(100% + 8px)"}:{top:"calc(100% + 8px))"}),
+          position:"absolute", zIndex:999, background:"#fff", borderRadius:16, minWidth:240,
+          boxShadow:"0 20px 60px rgba(0,0,0,.2), 0 4px 12px rgba(0,0,0,.08)",
+          border:"1px solid #E2E8F0", overflow:"hidden", left:0,
+          ...(up?{bottom:"calc(100% + 10px)"}:{top:"calc(100% + 10px)"}),
           animation:"popIn .15s cubic-bezier(.34,1.56,.64,1)"
         }}>
-          <div style={{ padding:"10px 14px 4px", fontSize:10, fontWeight:700, color:"#94A3B8", textTransform:"uppercase", letterSpacing:".07em" }}>Status testów</div>
+          <div style={{ padding:"12px 16px 8px", fontSize:10, fontWeight:800, color:"#94A3B8", textTransform:"uppercase", letterSpacing:".1em", borderBottom:"1px solid #F1F5F9" }}>🧪 Status testów</div>
+          <div style={{ padding:"6px" }}>
           {TEST_STATES.map(t => (
             <div key={t.key} onClick={() => { onChange({ ...val, state:t.key }); setOpen(false); }}
-              style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 14px", cursor:"pointer",
+              style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 12px", cursor:"pointer", borderRadius:10, marginBottom:2,
                 background:val.state===t.key?t.bg:"transparent",
-                borderLeft:`3px solid ${val.state===t.key?t.dot:"transparent"}` }}
-              onMouseEnter={e=>{ if(val.state!==t.key) e.currentTarget.style.background="#F8FAFC"; }}
-              onMouseLeave={e=>{ if(val.state!==t.key) e.currentTarget.style.background="transparent"; }}>
-              <span style={{ width:26, height:26, borderRadius:8, background:t.bg, border:`1.5px solid ${t.border}`,
-                display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, fontSize:12, fontWeight:900, color:t.dot }}>{t.icon}</span>
-              <span style={{ color:t.color, fontWeight:700, fontSize:13 }}>{t.label}</span>
-              {val.state===t.key && <span style={{ marginLeft:"auto", color:t.dot, fontSize:12, fontWeight:800 }}>✓</span>}
+                border:`1.5px solid ${val.state===t.key?t.border:"transparent"}`,
+                transition:"all .12s" }}
+              onMouseEnter={e=>{ if(val.state!==t.key){ e.currentTarget.style.background="#F8FAFC"; e.currentTarget.style.borderColor="#E2E8F0"; }}}
+              onMouseLeave={e=>{ if(val.state!==t.key){ e.currentTarget.style.background="transparent"; e.currentTarget.style.borderColor="transparent"; }}}>
+              <span style={{ width:34, height:34, borderRadius:10, background:t.bg, border:`2px solid ${t.border}`,
+                display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, fontSize:16, fontWeight:900, color:t.dot,
+                boxShadow:`0 2px 8px ${t.dot}33` }}>{t.icon}</span>
+              <div>
+                <div style={{ color:t.color, fontWeight:800, fontSize:13 }}>{t.label}</div>
+                <div style={{ color:t.dot, fontSize:10, opacity:.7, marginTop:1 }}>
+                  {t.key==="pass"?"Testy zakończone sukcesem":t.key==="fail"?"Wykryto błędy":t.key==="running"?"Testy w toku":t.key==="skipped"?"Pominięto testy":"Jeszcze nie testowano"}
+                </div>
+              </div>
+              {val.state===t.key && <span style={{ marginLeft:"auto", width:20, height:20, borderRadius:"50%", background:t.dot, display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", fontSize:11, fontWeight:900, flexShrink:0 }}>✓</span>}
             </div>
           ))}
-          <div style={{ height:8 }} />
+          </div>
         </div>
       )}
     </div>
@@ -218,6 +244,112 @@ function StatusCell({ value, options, onChange }) {
   );
 }
 
+// ── COMMENT CELL ──────────────────────────────────────────────────────────────
+function CommentCell({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [pos, setPos] = useState({ top:0, left:0, width:300 });
+  const btnRef = useRef();
+  const taRef = useRef();
+
+  const openPanel = () => {
+    setDraft(value);
+    if (btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - r.bottom;
+      const top = spaceBelow > 280 ? r.bottom + 6 : r.top - 290;
+      setPos({ top: top + window.scrollY, left: Math.min(r.left, window.innerWidth - 310), width: 300 });
+    }
+    setOpen(true);
+    setTimeout(()=>taRef.current?.focus(), 50);
+  };
+
+  const save = () => { onChange(draft); setOpen(false); };
+  const cancel = () => { setDraft(value); setOpen(false); };
+
+  useEffect(() => {
+    const fn = e => {
+      if (!btnRef.current?.contains(e.target) && !document.getElementById("comment-portal")?.contains(e.target)) {
+        onChange(draft); setOpen(false);
+      }
+    };
+    if (open) document.addEventListener("mousedown", fn);
+    return () => document.removeEventListener("mousedown", fn);
+  }, [open, draft]);
+
+  const isEmpty = !value || value.trim() === "";
+
+  return (
+    <div style={{ userSelect:"none", minWidth:140 }}>
+      {/* Preview pill */}
+      <div ref={btnRef} onClick={openPanel} style={{
+        display:"flex", alignItems:"center", gap:6, padding:"5px 10px",
+        borderRadius:8, cursor:"pointer", transition:"all .15s", maxWidth:200,
+        border:`1.5px solid ${open?"#3B82F6":isEmpty?"#E2E8F0":"#CBD5E1"}`,
+        background:open?"#EFF6FF":isEmpty?"#F8FAFC":"#fff", minHeight:32
+      }}
+        onMouseEnter={e=>{ if(!open){e.currentTarget.style.borderColor="#3B82F6";e.currentTarget.style.background="#F0F9FF";}}}
+        onMouseLeave={e=>{ if(!open){e.currentTarget.style.borderColor=isEmpty?"#E2E8F0":"#CBD5E1";e.currentTarget.style.background=isEmpty?"#F8FAFC":"#fff";}}}>
+        <span style={{ fontSize:11, flexShrink:0 }}>💬</span>
+        {isEmpty
+          ? <span style={{ color:"#CBD5E1", fontSize:12, fontStyle:"italic" }}>Dodaj komentarz…</span>
+          : <span style={{ color:"#374151", fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:150, display:"block" }}>{value}</span>
+        }
+        <span style={{ marginLeft:"auto", fontSize:10, color:"#94A3B8", flexShrink:0 }}>✏️</span>
+      </div>
+
+      {/* FIXED portal panel — escapes table overflow */}
+      {open && ReactDOM.createPortal(
+        <div id="comment-portal" style={{
+          position:"fixed", top:pos.top, left:pos.left, zIndex:9999,
+          background:"#fff", borderRadius:16, width:320,
+          boxShadow:"0 20px 60px rgba(0,0,0,.22), 0 4px 16px rgba(0,0,0,.1)",
+          border:"1px solid #E2E8F0", overflow:"hidden",
+          animation:"popIn .15s cubic-bezier(.34,1.56,.64,1)"
+        }}>
+          <div style={{ padding:"12px 16px 10px", background:"linear-gradient(135deg,#F8FAFC,#F1F5F9)", borderBottom:"1px solid #E2E8F0", display:"flex", alignItems:"center", gap:8 }}>
+            <span style={{ fontSize:16 }}>💬</span>
+            <span style={{ fontSize:13, fontWeight:800, color:"#1E293B" }}>Komentarz</span>
+            {draft && <span style={{ marginLeft:"auto", fontSize:10, color:"#94A3B8", background:"#E2E8F0", padding:"1px 8px", borderRadius:20 }}>{draft.length} zn.</span>}
+            <button onClick={cancel} style={{ border:"none", background:"none", cursor:"pointer", color:"#94A3B8", fontSize:16, padding:0, marginLeft:draft?"0":"auto" }}>✕</button>
+          </div>
+
+          <div style={{ padding:"12px" }}>
+            <textarea ref={taRef} value={draft} onChange={e=>setDraft(e.target.value)}
+              onKeyDown={e=>{ if(e.key==="Enter"&&e.ctrlKey) save(); if(e.key==="Escape") cancel(); }}
+              placeholder="Wpisz komentarz…&#10;Ctrl+Enter = zapisz  ·  Esc = anuluj"
+              rows={5}
+              style={{ width:"100%", border:"1.5px solid #E2E8F0", borderRadius:10, padding:"10px 12px",
+                fontSize:13, fontFamily:"inherit", resize:"vertical", color:"#1E293B", lineHeight:1.6,
+                minHeight:100, transition:"border-color .15s", background:"#FAFBFF" }}
+              onFocus={e=>e.currentTarget.style.borderColor="#3B82F6"}
+              onBlur={e=>e.currentTarget.style.borderColor="#E2E8F0"} />
+          </div>
+
+          <div style={{ padding:"0 12px 10px", display:"flex", gap:6, flexWrap:"wrap" }}>
+            {["✅ OK","⚠️ Blokada","🔄 W trakcie","❌ Błąd","📋 Do weryfikacji","🚀 Gotowe"].map(tag=>(
+              <div key={tag} onClick={()=>setDraft(d=>d?d+" "+tag:tag)}
+                style={{ padding:"3px 10px", borderRadius:20, background:"#F1F5F9", color:"#475569",
+                  fontSize:11, fontWeight:600, cursor:"pointer", border:"1px solid #E2E8F0", transition:"all .1s" }}
+                onMouseEnter={e=>{e.currentTarget.style.background="#EFF6FF";e.currentTarget.style.borderColor="#93C5FD";e.currentTarget.style.color="#1D4ED8";}}
+                onMouseLeave={e=>{e.currentTarget.style.background="#F1F5F9";e.currentTarget.style.borderColor="#E2E8F0";e.currentTarget.style.color="#475569";}}>
+                {tag}
+              </div>
+            ))}
+          </div>
+
+          <div style={{ padding:"10px 12px 12px", display:"flex", gap:8, justifyContent:"flex-end", borderTop:"1px solid #F1F5F9" }}>
+            {draft && <button onClick={()=>setDraft("")} style={{ border:"none", background:"transparent", color:"#EF4444", fontSize:12, cursor:"pointer", padding:"7px 10px", borderRadius:8, fontFamily:"inherit", fontWeight:600 }}>🗑 Usuń</button>}
+            <button onClick={cancel} style={{ border:"1.5px solid #E2E8F0", background:"transparent", color:"#64748B", fontSize:12, cursor:"pointer", padding:"7px 16px", borderRadius:8, fontFamily:"inherit", fontWeight:600 }}>Anuluj</button>
+            <button onClick={save} style={{ border:"none", background:"linear-gradient(135deg,#1E293B,#0F172A)", color:"#fff", fontSize:12, cursor:"pointer", padding:"7px 18px", borderRadius:8, fontFamily:"inherit", fontWeight:700, boxShadow:"0 2px 8px rgba(0,0,0,.2)" }}>💾 Zapisz</button>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
 // ── CHECK CELL ─────────────────────────────────────────────────────────────────
 function CheckCell({ value, onChange }) {
   return (
@@ -262,7 +394,7 @@ function ColumnModal({ col, onSave, onClose }) {
 
   const save = () => {
     if (!name.trim()) return;
-    const base = { id:col.id||mkId(), name:name.trim(), type };
+    const base = { id:col.id||mkId(), name:name.trim(), type, ...(col.comment?{comment:true}:{}) };
     if (type==="select") return onSave({ ...base, options:selectOpts.split("\n").map(s=>s.trim()).filter(Boolean) });
     if (type==="status") return onSave({ ...base, options:statusOpts.filter(o=>o.label.trim()) });
     onSave(base);
@@ -305,9 +437,20 @@ function ColumnModal({ col, onSave, onClose }) {
             <div style={{ marginTop:12, padding:"12px 14px", background:"#F0FDF4", borderRadius:10, border:"1px solid #BBF7D0" }}>
               <p style={{ margin:0, fontSize:12, color:"#065F46", fontWeight:700 }}>🧪 Pole Testy zawiera:</p>
               <p style={{ margin:"5px 0 0", fontSize:12, color:"#047857", lineHeight:1.6 }}>
-                • Status: Nie testowano / Przeszły ✓ / Nie przeszły ✕ / W trakcie ▶ / Pominięte ⏭<br/>
-                • Pole notatki inline (np. "5/8 OK", opis błędu)
+                • Status: Nie testowano / Przeszły ✓ / Nie przeszły ✕ / W trakcie ▶ / Pominięte ⏭
               </p>
+            </div>
+          )}
+          {type==="text" && (
+            <div style={{ marginTop:12, display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:"#F8FAFC", borderRadius:10, border:"1px solid #E2E8F0", cursor:"pointer" }}
+              onClick={()=>{ const el=document.getElementById("comment-toggle"); if(el) el.click(); }}>
+              <input id="comment-toggle" type="checkbox" checked={!!col.comment}
+                onChange={e=>{ col.comment = e.target.checked; }}
+                style={{ width:16, height:16, cursor:"pointer", accentColor:"#3B82F6" }}/>
+              <div>
+                <div style={{ fontSize:12, fontWeight:700, color:"#1E293B" }}>💬 Pole komentarzowe</div>
+                <div style={{ fontSize:11, color:"#64748B", marginTop:2 }}>Otwiera duży panel do pisania dłuższych notatek</div>
+              </div>
             </div>
           )}
         </div>
@@ -526,10 +669,13 @@ function SheetView({ sheet, onChange }) {
                         <input type="number" value={row[col.id]||""} onChange={e=>updateRow(row.id,col.id,e.target.value)}
                           style={{ border:"1px solid transparent", padding:"3px 6px", borderRadius:6, width:80, background:"transparent", fontFamily:"inherit", fontSize:13 }}/>
                       ) : (
-                        <input type="text" value={row[col.id]||""} onChange={e=>updateRow(row.id,col.id,e.target.value)}
-                          style={{ border:"1px solid transparent", padding:"3px 6px", borderRadius:6, width:"100%", minWidth:70, background:"transparent", fontFamily:"inherit", fontSize:13 }}
-                          onFocus={e=>e.currentTarget.style.borderColor="#CBD5E1"}
-                          onBlur={e=>e.currentTarget.style.borderColor="transparent"}/>
+                        col.comment
+                          ? <CommentCell value={row[col.id]||""} onChange={v=>updateRow(row.id,col.id,v)}/>
+                          : <input type="text" value={row[col.id]||""} onChange={e=>updateRow(row.id,col.id,e.target.value)}
+                              style={{ border:"1px solid transparent", padding:"4px 7px", borderRadius:7,
+                                width:"100%", minWidth:60, background:"transparent", fontFamily:"inherit", fontSize:13, color:"#1E293B" }}
+                              onFocus={e=>e.currentTarget.style.borderColor="#CBD5E1"}
+                              onBlur={e=>e.currentTarget.style.borderColor="transparent"}/>
                       )}
                     </td>
                   ))}
@@ -566,13 +712,35 @@ function SheetView({ sheet, onChange }) {
 
 // ── ROOT APP ───────────────────────────────────────────────────────────────────
 function App() {
-  const [sheets, setSheets] = useState(()=>loadData());
-  const [activeId, setActiveId] = useState(()=>loadData()[0]?.id);
+  const [sheets, setSheets] = useState(defaultSheets);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState(null);
+  const [activeId, setActiveId] = useState(null);
   const [editingTab, setEditingTab] = useState(null);
   const [newSheetMode, setNewSheetMode] = useState(false);
   const [newSheetName, setNewSheetName] = useState("");
 
-  useEffect(()=>{ saveData(sheets); },[sheets]);
+  useEffect(()=>{
+    loadFromSheets().then(data => {
+      setSheets(data);
+      setActiveId(data[0]?.id);
+      setLoading(false);
+    });
+  },[]);
+
+  const saveDebounced = useRef(null);
+  useEffect(()=>{
+    if (loading) return;
+    clearTimeout(saveDebounced.current);
+    saveDebounced.current = setTimeout(() => {
+      setSaving(true);
+      saveToSheets(sheets).then(()=>{
+        setLastSaved(new Date());
+        setSaving(false);
+      });
+    }, 1500);
+  },[sheets]);
 
   const active = sheets.find(s=>s.id===activeId)||sheets[0];
   const updateSheet = s => setSheets(p=>p.map(x=>x.id===s.id?s:x));
@@ -604,6 +772,15 @@ function App() {
     setSheets(rest); if(activeId===id) setActiveId(rest[0].id);
   };
 
+  if (loading) return (
+    <div style={{ minHeight:"100vh", background:"#EEF2FF", display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:16, fontFamily:"'Segoe UI',system-ui,sans-serif" }}>
+      <div style={{ fontSize:48, animation:"spin 1.5s linear infinite" }}>⚙️</div>
+      <div style={{ color:"#1E293B", fontWeight:700, fontSize:16 }}>Wczytywanie z Google Sheets…</div>
+      <div style={{ color:"#94A3B8", fontSize:13 }}>Dane są synchronizowane z chmurą</div>
+      <style>{`@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }`}</style>
+    </div>
+  );
+
   return (
     <div style={{ minHeight:"100vh", background:"#EEF2FF", fontFamily:"'Segoe UI',system-ui,sans-serif" }}>
       {/* TOPBAR */}
@@ -613,7 +790,7 @@ function App() {
             <div style={{ width:38, height:38, borderRadius:11, background:"linear-gradient(135deg,#3B82F6,#8B5CF6)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, boxShadow:"0 4px 14px #3B82F644" }}>📋</div>
             <div>
               <div style={{ color:"#fff", fontWeight:900, fontSize:17, letterSpacing:"-.3px" }}>Release Tracker</div>
-              <div style={{ color:"#475569", fontSize:11 }}>Zarządzanie zadaniami i checklistą release</div>
+              <div style={{ color:"#475569", fontSize:11, display:"flex", alignItems:"center", gap:6 }}>Zarządzanie zadaniami {saving && <span style={{ background:"#334155", color:"#60A5FA", fontSize:10, padding:"2px 8px", borderRadius:20 }}>⏳ Zapisywanie…</span>} {!saving && lastSaved && <span style={{ background:"#334155", color:"#34D399", fontSize:10, padding:"2px 8px", borderRadius:20 }}>✓ {lastSaved.toLocaleTimeString("pl")}</span>}</div>
             </div>
           </div>
           {releaseSheet && (
