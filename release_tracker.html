@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Release Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #EEF2FF; min-height: 100vh; }
+  input, textarea, select { outline: none; }
+  @keyframes popIn   { from{opacity:0;transform:scale(.95) translateY(-4px)} to{opacity:1;transform:none} }
+  @keyframes slideIn { from{opacity:0;transform:translateY(10px)}            to{opacity:1;transform:none} }
+  ::-webkit-scrollbar { height: 5px; width: 5px; }
+  ::-webkit-scrollbar-track { background: #f1f5f9; }
+  ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+const STORAGE_KEY = "release-tracker-v3";
+
+const STATUS_OPTS = [
+  { label: "Zakończone",     bg: "#D1FAE5", color: "#065F46", dot: "#10B981", border: "#6EE7B7" },
+  { label: "Nie rozpoczęte", bg: "#FEE2E2", color: "#991B1B", dot: "#EF4444", border: "#FCA5A5" },
+  { label: "Wstrzymane",     bg: "#DBEAFE", color: "#1E3A8A", dot: "#3B82F6", border: "#93C5FD" },
+  { label: "Do wyjaśnienia", bg: "#FEF9C3", color: "#854D0E", dot: "#EAB308", border: "#FDE047" },
+];
+
+const TEST_STATES = [
+  { key: "untested", label: "Nie testowano", icon: "○", bg: "#F8FAFC", color: "#94A3B8", border: "#E2E8F0", dot: "#CBD5E1" },
+  { key: "pass",     label: "Przeszły",      icon: "✓", bg: "#D1FAE5", color: "#065F46", border: "#6EE7B7", dot: "#10B981" },
+  { key: "fail",     label: "Nie przeszły",  icon: "✕", bg: "#FEE2E2", color: "#991B1B", border: "#FCA5A5", dot: "#EF4444" },
+  { key: "running",  label: "W trakcie",     icon: "▶", bg: "#FEF9C3", color: "#854D0E", border: "#FDE047", dot: "#EAB308" },
+  { key: "skipped",  label: "Pominięte",     icon: "⏭", bg: "#F3E8FF", color: "#6B21A8", border: "#D8B4FE", dot: "#A855F7" },
+];
+
+const PALETTE = [
+  { bg: "#D1FAE5", color: "#065F46", dot: "#10B981", border: "#6EE7B7" },
+  { bg: "#FEE2E2", color: "#991B1B", dot: "#EF4444", border: "#FCA5A5" },
+  { bg: "#DBEAFE", color: "#1E3A8A", dot: "#3B82F6", border: "#93C5FD" },
+  { bg: "#FEF9C3", color: "#854D0E", dot: "#EAB308", border: "#FDE047" },
+  { bg: "#F3E8FF", color: "#6B21A8", dot: "#A855F7", border: "#D8B4FE" },
+  { bg: "#FFE4E6", color: "#9F1239", dot: "#F43F5E", border: "#FCA5A5" },
+  { bg: "#E0F2FE", color: "#0C4A6E", dot: "#0EA5E9", border: "#7DD3FC" },
+  { bg: "#FEF3C7", color: "#92400E", dot: "#F59E0B", border: "#FCD34D" },
+];
+
+const mkId = () => `id_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
+const emptyTest = () => ({ state: "untested", note: "" });
+
+const defaultSheets = [
+  {
+    id: "sheet_release_tasks", name: "🚀 Zadania do Release", icon: "🚀",
+    columns: [
+      { id: "col_opis",  name: "Opis",           type: "text"   },
+      { id: "col_task",  name: "Task",            type: "text"   },
+      { id: "col_be",    name: "Status Backend",  type: "status", options: STATUS_OPTS },
+      { id: "col_fe",    name: "Status Frontend", type: "status", options: STATUS_OPTS },
+      { id: "col_testy", name: "Testy",           type: "test"   },
+      { id: "col_kom",   name: "Komentarz",       type: "text"   },
+    ],
+    rows: [
+      { id: mkId(), col_opis: "Autoryzacja JWT",      col_task: "PROJ-101", col_be: "Zakończone",     col_fe: "Wstrzymane",     col_testy: { state: "pass",     note: "Wszystkie case'y zielone" }, col_kom: "" },
+      { id: mkId(), col_opis: "Panel użytkownika",    col_task: "PROJ-102", col_be: "Nie rozpoczęte", col_fe: "Nie rozpoczęte", col_testy: { state: "untested", note: "" },                         col_kom: "" },
+      { id: mkId(), col_opis: "Integracja płatności", col_task: "PROJ-103", col_be: "Do wyjaśnienia", col_fe: "Nie rozpoczęte", col_testy: { state: "fail",     note: "Błąd przy 3D Secure" },      col_kom: "Czekamy na klucze API" },
+    ]
+  },
+  {
+    id: "sheet_checklist", name: "✅ Checklist Release", icon: "✅",
+    columns: [
+      { id: "col_func",   name: "Funkcjonalność", type: "text"     },
+      { id: "col_opis",   name: "Opis",           type: "text"     },
+      { id: "col_status", name: "Status",         type: "status",   options: STATUS_OPTS },
+      { id: "col_testy",  name: "Testy",          type: "test"     },
+      { id: "col_kom",    name: "Komentarz",      type: "text"     },
+      { id: "col_pokr",   name: "Pokrycie",       type: "checkbox" },
+    ],
+    rows: [
+      { id: mkId(), col_func: "Logowanie",              col_opis: "Sprawdzenie funkcji logowania",    col_status: "Zakończone",     col_testy: { state: "pass",     note: "12/12 testów OK" }, col_kom: "", col_pokr: true  },
+      { id: mkId(), col_func: "Rejestracja",             col_opis: "Sprawdzenie funkcji rejestracji", col_status: "Nie rozpoczęte", col_testy: { state: "untested", note: "" },                col_kom: "", col_pokr: false },
+      { id: mkId(), col_func: "Formularz kontaktowy",   col_opis: "Weryfikacja poprawności danych",  col_status: "Zakończone",     col_testy: { state: "pass",     note: "" },                col_kom: "", col_pokr: true  },
+      { id: mkId(), col_func: "Wyszukiwanie produktów", col_opis: "Testowanie wyszukiwarki",         col_status: "Wstrzymane",     col_testy: { state: "running",  note: "3/8 gotowe" },      col_kom: "Blokada na API", col_pokr: false },
+    ]
+  }
+];
+
+function loadData() {
+  try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : defaultSheets; } catch { return defaultSheets; }
+}
+function saveData(d) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch {} }
+
+// ── TEST CELL ──────────────────────────────────────────────────────────────────
+function TestCell({ value, onChange }) {
+  const val = (value && typeof value === "object") ? value : emptyTest();
+  const [open, setOpen] = useState(false);
+  const [up, setUp] = useState(false);
+  const ref = useRef();
+  const state = TEST_STATES.find(t => t.key === val.state) || TEST_STATES[0];
+
+  const toggle = () => {
+    if (!open && ref.current) setUp(window.innerHeight - ref.current.getBoundingClientRect().bottom < 290);
+    setOpen(o => !o);
+  };
+  useEffect(() => {
+    const fn = e => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    if (open) document.addEventListener("mousedown", fn);
+    return () => document.removeEventListener("mousedown", fn);
+  }, [open]);
+
+  return (
+    <div ref={ref} style={{ position:"relative", userSelect:"none", minWidth:210 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+        <div onClick={toggle} style={{
+          display:"flex", alignItems:"center", gap:6, padding:"5px 10px",
+          background:state.bg, border:`1.5px solid ${state.border}`,
+          borderRadius:20, cursor:"pointer", flexShrink:0, whiteSpace:"nowrap",
+          boxShadow:open?`0 0 0 3px ${state.dot}28`:"none", transition:"box-shadow .15s"
+        }}>
+          <span style={{ fontSize:12, fontWeight:900, color:state.dot, lineHeight:1 }}>{state.icon}</span>
+          <span style={{ color:state.color, fontWeight:700, fontSize:11 }}>{state.label}</span>
+          <span style={{ color:state.color, fontSize:8, opacity:.6, transform:open?"rotate(180deg)":"none", display:"inline-block", transition:"transform .2s" }}>▾</span>
+        </div>
+        <input type="text" value={val.note} onChange={e => onChange({ ...val, note:e.target.value })}
+          onClick={e => e.stopPropagation()}
+          placeholder={val.state==="fail"?"Opisz błąd…":val.state==="running"?"np. 3/8 gotowe…":"Notatka…"}
+          style={{ flex:1, minWidth:0, border:"none", background:"transparent", fontSize:12,
+            color:val.note?"#374151":"#CBD5E1", fontFamily:"inherit", padding:"3px 0",
+            borderBottom:`1px dashed ${val.note ? state.dot+"88" : "#E2E8F0"}` }} />
+      </div>
+      {open && (
+        <div style={{
+          position:"absolute", zIndex:999, background:"#fff", borderRadius:14, minWidth:196,
+          boxShadow:"0 12px 40px rgba(0,0,0,.18)", border:"1px solid #F1F5F9", overflow:"hidden", left:0,
+          ...(up?{bottom:"calc(100% + 8px)"}:{top:"calc(100% + 8px))"}),
+          animation:"popIn .15s cubic-bezier(.34,1.56,.64,1)"
+        }}>
+          <div style={{ padding:"10px 14px 4px", fontSize:10, fontWeight:700, color:"#94A3B8", textTransform:"uppercase", letterSpacing:".07em" }}>Status testów</div>
+          {TEST_STATES.map(t => (
+            <div key={t.key} onClick={() => { onChange({ ...val, state:t.key }); setOpen(false); }}
+              style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 14px", cursor:"pointer",
+                background:val.state===t.key?t.bg:"transparent",
+                borderLeft:`3px solid ${val.state===t.key?t.dot:"transparent"}` }}
+              onMouseEnter={e=>{ if(val.state!==t.key) e.currentTarget.style.background="#F8FAFC"; }}
+              onMouseLeave={e=>{ if(val.state!==t.key) e.currentTarget.style.background="transparent"; }}>
+              <span style={{ width:26, height:26, borderRadius:8, background:t.bg, border:`1.5px solid ${t.border}`,
+                display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, fontSize:12, fontWeight:900, color:t.dot }}>{t.icon}</span>
+              <span style={{ color:t.color, fontWeight:700, fontSize:13 }}>{t.label}</span>
+              {val.state===t.key && <span style={{ marginLeft:"auto", color:t.dot, fontSize:12, fontWeight:800 }}>✓</span>}
+            </div>
+          ))}
+          <div style={{ height:8 }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── STATUS CELL ────────────────────────────────────────────────────────────────
+function StatusCell({ value, options, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [up, setUp] = useState(false);
+  const ref = useRef();
+  const opts = options || STATUS_OPTS;
+  const opt = opts.find(o => o.label===value) || opts[0];
+
+  const toggle = () => {
+    if (!open && ref.current) setUp(window.innerHeight - ref.current.getBoundingClientRect().bottom < 230);
+    setOpen(o => !o);
+  };
+  useEffect(() => {
+    const fn = e => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    if (open) document.addEventListener("mousedown", fn);
+    return () => document.removeEventListener("mousedown", fn);
+  }, [open]);
+
+  return (
+    <div ref={ref} style={{ position:"relative", userSelect:"none" }}>
+      <div onClick={toggle} style={{
+        display:"flex", alignItems:"center", gap:7, padding:"5px 11px",
+        background:opt.bg, border:`1.5px solid ${opt.border}`, borderRadius:20,
+        cursor:"pointer", justifyContent:"space-between", minWidth:148,
+        boxShadow:open?`0 0 0 3px ${opt.dot}28`:"none", transition:"box-shadow .15s"
+      }}>
+        <span style={{ display:"flex", alignItems:"center", gap:7 }}>
+          <span style={{ width:7, height:7, borderRadius:"50%", background:opt.dot, boxShadow:`0 0 4px ${opt.dot}88` }}/>
+          <span style={{ color:opt.color, fontWeight:700, fontSize:12 }}>{opt.label}</span>
+        </span>
+        <span style={{ color:opt.color, fontSize:9, opacity:.6, transform:open?"rotate(180deg)":"none", display:"inline-block", transition:"transform .2s" }}>▾</span>
+      </div>
+      {open && (
+        <div style={{
+          position:"absolute", zIndex:999, background:"#fff", borderRadius:12, minWidth:178,
+          boxShadow:"0 12px 40px rgba(0,0,0,.18)", border:"1px solid #F1F5F9", overflow:"hidden",
+          ...(up?{bottom:"calc(100% + 8px)"}:{top:"calc(100% + 8px)"}),
+          animation:"popIn .15s cubic-bezier(.34,1.56,.64,1)"
+        }}>
+          {opts.map(o => (
+            <div key={o.label} onClick={() => { onChange(o.label); setOpen(false); }}
+              style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 13px", cursor:"pointer",
+                background:value===o.label?o.bg:"transparent",
+                borderLeft:`3px solid ${value===o.label?o.dot:"transparent"}` }}
+              onMouseEnter={e=>{ if(value!==o.label) e.currentTarget.style.background="#F8FAFC"; }}
+              onMouseLeave={e=>{ if(value!==o.label) e.currentTarget.style.background="transparent"; }}>
+              <span style={{ width:9, height:9, borderRadius:"50%", background:o.dot, boxShadow:`0 0 4px ${o.dot}66` }}/>
+              <span style={{ color:o.color, fontWeight:700, fontSize:12 }}>{o.label}</span>
+              {value===o.label && <span style={{ marginLeft:"auto", color:o.dot, fontSize:11 }}>✓</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── CHECK CELL ─────────────────────────────────────────────────────────────────
+function CheckCell({ value, onChange }) {
+  return (
+    <div onClick={() => onChange(!value)} style={{
+      width:28, height:28, borderRadius:8, cursor:"pointer", margin:"0 auto",
+      display:"flex", alignItems:"center", justifyContent:"center",
+      border:`2px solid ${value?"#10B981":"#E2E8F0"}`,
+      background:value?"#D1FAE5":"#F8FAFC",
+      transition:"all .18s cubic-bezier(.34,1.56,.64,1)",
+      boxShadow:value?"0 0 8px #10B98144":"none",
+      transform:value?"scale(1.08)":"scale(1)"
+    }}>
+      {value
+        ? <span style={{ color:"#065F46", fontSize:14, fontWeight:900 }}>✓</span>
+        : <span style={{ color:"#CBD5E1", fontSize:12, fontWeight:700 }}>○</span>}
+    </div>
+  );
+}
+
+function ProgressBar({ value, color="#10B981" }) {
+  return (
+    <div style={{ height:5, background:"#F1F5F9", borderRadius:99, overflow:"hidden" }}>
+      <div style={{ height:"100%", width:`${value}%`, background:color, borderRadius:99, transition:"width .6s cubic-bezier(.4,0,.2,1)", boxShadow:`0 0 6px ${color}66` }}/>
+    </div>
+  );
+}
+
+// ── COLUMN MODAL ───────────────────────────────────────────────────────────────
+function ColumnModal({ col, onSave, onClose }) {
+  const isNew = !col.id;
+  const [name, setName] = useState(col.name||"");
+  const [type, setType] = useState(col.type||"text");
+  const [selectOpts, setSelectOpts] = useState(col.type==="select"?(col.options||[]).join("\n"):"");
+  const [statusOpts, setStatusOpts] = useState(col.type==="status"?(col.options||[]):[
+    { label:"Opcja 1", ...PALETTE[0] }, { label:"Opcja 2", ...PALETTE[1] }
+  ]);
+
+  const addOpt = () => setStatusOpts(o => [...o, { label:"Nowa opcja", ...PALETTE[o.length%PALETTE.length] }]);
+  const removeOpt = i => setStatusOpts(o => o.filter((_,idx) => idx!==i));
+  const updateLabel = (i,v) => setStatusOpts(o => o.map((x,idx) => idx===i?{...x,label:v}:x));
+  const updateColor = (i,p) => setStatusOpts(o => o.map((x,idx) => idx===i?{...x,...p}:x));
+
+  const save = () => {
+    if (!name.trim()) return;
+    const base = { id:col.id||mkId(), name:name.trim(), type };
+    if (type==="select") return onSave({ ...base, options:selectOpts.split("\n").map(s=>s.trim()).filter(Boolean) });
+    if (type==="status") return onSave({ ...base, options:statusOpts.filter(o=>o.label.trim()) });
+    onSave(base);
+  };
+
+  const TYPES = [
+    { val:"text",     icon:"✏️", label:"Tekst"    },
+    { val:"status",   icon:"🎯", label:"Status"   },
+    { val:"test",     icon:"🧪", label:"Testy"    },
+    { val:"select",   icon:"📋", label:"Lista"    },
+    { val:"checkbox", icon:"☑️", label:"Checkbox" },
+    { val:"number",   icon:"🔢", label:"Liczba"   },
+  ];
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,.6)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", backdropFilter:"blur(4px)" }}
+      onClick={e => e.target===e.currentTarget && onClose()}>
+      <div style={{ background:"#fff", borderRadius:20, padding:32, width:500, maxWidth:"calc(100vw - 32px)", maxHeight:"85vh", overflowY:"auto", boxShadow:"0 30px 80px rgba(0,0,0,.3)", animation:"popIn .2s cubic-bezier(.34,1.56,.64,1)" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
+          <h3 style={{ fontSize:20, fontWeight:800, color:"#0F172A" }}>{isNew?"➕ Nowa kolumna":"✏️ Edytuj kolumnę"}</h3>
+          <button onClick={onClose} style={{ border:"none", background:"#F1F5F9", fontSize:16, cursor:"pointer", color:"#64748B", width:32, height:32, borderRadius:8 }}>✕</button>
+        </div>
+        <div style={{ marginBottom:18 }}>
+          <label style={{ display:"block", fontSize:11, fontWeight:700, color:"#64748B", textTransform:"uppercase", letterSpacing:".06em", marginBottom:8 }}>Nazwa kolumny</label>
+          <input value={name} onChange={e=>setName(e.target.value)} placeholder="np. Priorytet, Assignee..."
+            style={{ width:"100%", border:"1.5px solid #E2E8F0", borderRadius:10, padding:"10px 14px", fontSize:14, fontFamily:"inherit", color:"#1E293B" }}/>
+        </div>
+        <div style={{ marginBottom:22 }}>
+          <label style={{ display:"block", fontSize:11, fontWeight:700, color:"#64748B", textTransform:"uppercase", letterSpacing:".06em", marginBottom:10 }}>Typ pola</label>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            {TYPES.map(t => (
+              <div key={t.val} onClick={()=>setType(t.val)} style={{
+                padding:"8px 14px", borderRadius:20, cursor:"pointer", fontSize:13, fontWeight:600,
+                background:type===t.val?"#0F172A":"#F8FAFC", color:type===t.val?"#fff":"#64748B",
+                border:`2px solid ${type===t.val?"#0F172A":"#E2E8F0"}`, transition:"all .15s"
+              }}>{t.icon} {t.label}</div>
+            ))}
+          </div>
+          {type==="test" && (
+            <div style={{ marginTop:12, padding:"12px 14px", background:"#F0FDF4", borderRadius:10, border:"1px solid #BBF7D0" }}>
+              <p style={{ margin:0, fontSize:12, color:"#065F46", fontWeight:700 }}>🧪 Pole Testy zawiera:</p>
+              <p style={{ margin:"5px 0 0", fontSize:12, color:"#047857", lineHeight:1.6 }}>
+                • Status: Nie testowano / Przeszły ✓ / Nie przeszły ✕ / W trakcie ▶ / Pominięte ⏭<br/>
+                • Pole notatki inline (np. "5/8 OK", opis błędu)
+              </p>
+            </div>
+          )}
+        </div>
+        {type==="status" && (
+          <div style={{ marginBottom:18 }}>
+            <label style={{ display:"block", fontSize:11, fontWeight:700, color:"#64748B", textTransform:"uppercase", letterSpacing:".06em", marginBottom:10 }}>Opcje statusu</label>
+            {statusOpts.map((o,i) => (
+              <div key={i} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                <div style={{ display:"flex", gap:4, flexShrink:0 }}>
+                  {PALETTE.map((p,pi) => (
+                    <div key={pi} onClick={()=>updateColor(i,p)} style={{ width:16, height:16, borderRadius:"50%", background:p.dot, cursor:"pointer",
+                      border:o.dot===p.dot?"2.5px solid #0F172A":"2px solid transparent",
+                      transform:o.dot===p.dot?"scale(1.25)":"scale(1)", transition:"transform .1s" }}/>
+                  ))}
+                </div>
+                <div style={{ flex:1, padding:"5px 12px", borderRadius:20, background:o.bg, border:`1.5px solid ${o.dot}55` }}>
+                  <input value={o.label} onChange={e=>updateLabel(i,e.target.value)}
+                    style={{ border:"none", background:"transparent", width:"100%", color:o.color, fontWeight:700, fontSize:12, fontFamily:"inherit" }}/>
+                </div>
+                <button onClick={()=>removeOpt(i)} style={{ border:"none", background:"none", cursor:"pointer", color:"#CBD5E1", fontSize:15 }}
+                  onMouseEnter={e=>e.currentTarget.style.color="#EF4444"}
+                  onMouseLeave={e=>e.currentTarget.style.color="#CBD5E1"}>✕</button>
+              </div>
+            ))}
+            <button onClick={addOpt} style={{ border:"1.5px dashed #CBD5E1", background:"transparent", color:"#64748B", padding:"5px 14px", borderRadius:8, cursor:"pointer", fontSize:12, marginTop:4 }}>+ Dodaj opcję</button>
+          </div>
+        )}
+        {type==="select" && (
+          <div style={{ marginBottom:18 }}>
+            <label style={{ display:"block", fontSize:11, fontWeight:700, color:"#64748B", textTransform:"uppercase", letterSpacing:".06em", marginBottom:8 }}>Opcje (jedna per linia)</label>
+            <textarea value={selectOpts} onChange={e=>setSelectOpts(e.target.value)} rows={5} placeholder={"Opcja A\nOpcja B\nOpcja C"}
+              style={{ width:"100%", border:"1.5px solid #E2E8F0", borderRadius:10, padding:"10px 14px", fontSize:14, fontFamily:"inherit", resize:"vertical" }}/>
+          </div>
+        )}
+        <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:8 }}>
+          <button onClick={onClose} style={{ border:"1.5px solid #E2E8F0", background:"transparent", color:"#64748B", padding:"10px 22px", borderRadius:10, cursor:"pointer", fontSize:14, fontFamily:"inherit", fontWeight:600 }}>Anuluj</button>
+          <button onClick={save} style={{ border:"none", background:"linear-gradient(135deg,#1E293B,#0F172A)", color:"#fff", padding:"10px 22px", borderRadius:10, cursor:"pointer", fontSize:14, fontFamily:"inherit", fontWeight:700, boxShadow:"0 4px 12px rgba(0,0,0,.2)" }}>
+            {isNew?"Dodaj kolumnę":"Zapisz"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── SHEET VIEW ─────────────────────────────────────────────────────────────────
+function SheetView({ sheet, onChange }) {
+  const [colModal, setColModal] = useState(null);
+  const [editingHeader, setEditingHeader] = useState(null);
+  const [hoveredRow, setHoveredRow] = useState(null);
+
+  const updateRow = (rowId,colId,val) =>
+    onChange({ ...sheet, rows:sheet.rows.map(r => r.id===rowId ? {...r,[colId]:val} : r) });
+
+  const addRow = () => {
+    const row = { id:mkId() };
+    sheet.columns.forEach(c => {
+      if (c.type==="checkbox") row[c.id]=false;
+      else if (c.type==="test") row[c.id]=emptyTest();
+      else if (c.type==="status") row[c.id]=c.options?.[1]?.label||"Nie rozpoczęte";
+      else if (c.type==="select") row[c.id]=c.options?.[0]||"";
+      else row[c.id]="";
+    });
+    onChange({ ...sheet, rows:[...sheet.rows,row] });
+  };
+
+  const deleteRow = id => onChange({ ...sheet, rows:sheet.rows.filter(r=>r.id!==id) });
+
+  const saveCol = col => {
+    const def = col.type==="checkbox"?false:col.type==="test"?emptyTest():col.type==="status"?col.options?.[0]?.label||"":"";
+    if (colModal.isNew) {
+      onChange({ ...sheet, columns:[...sheet.columns,col], rows:sheet.rows.map(r=>({...r,[col.id]:def})) });
+    } else {
+      onChange({ ...sheet, columns:sheet.columns.map((c,i)=>i===colModal.idx?col:c) });
+    }
+    setColModal(null);
+  };
+
+  const deleteCol = idx => {
+    const col = sheet.columns[idx];
+    onChange({ ...sheet, columns:sheet.columns.filter((_,i)=>i!==idx), rows:sheet.rows.map(r=>{ const nr={...r}; delete nr[col.id]; return nr; }) });
+  };
+
+  const total = sheet.rows.length;
+  const statusCols = sheet.columns.filter(c=>c.type==="status");
+  const checkCols  = sheet.columns.filter(c=>c.type==="checkbox");
+  const testCols   = sheet.columns.filter(c=>c.type==="test");
+  const donePct = statusCols.length&&total ? Math.round(sheet.rows.filter(r=>r[statusCols[0].id]==="Zakończone").length/total*100) : null;
+
+  const testSummary = testCols.length&&total ? (() => {
+    const counts = { pass:0, fail:0, running:0, skipped:0, untested:0 };
+    sheet.rows.forEach(r => testCols.forEach(c => {
+      const s = (r[c.id]&&typeof r[c.id]==="object") ? r[c.id].state : "untested";
+      counts[s]=(counts[s]||0)+1;
+    }));
+    return counts;
+  })() : null;
+
+  const H = { padding:"12px 14px", fontWeight:700, fontSize:11, color:"#94A3B8", textTransform:"uppercase", letterSpacing:".07em", background:"#0F172A", borderBottom:"1px solid #1E293B", whiteSpace:"nowrap", textAlign:"left" };
+  const C = { padding:"10px 13px", fontSize:13, color:"#334155", borderBottom:"1px solid #F1F5F9", verticalAlign:"middle" };
+
+  return (
+    <div>
+      {colModal && <ColumnModal col={colModal.col} onSave={saveCol} onClose={()=>setColModal(null)}/>}
+
+      {/* Stats */}
+      <div style={{ display:"flex", gap:12, marginBottom:20, flexWrap:"wrap", alignItems:"stretch" }}>
+        <div style={{ padding:"12px 20px", borderRadius:14, background:"linear-gradient(135deg,#1E293B,#334155)", minWidth:90 }}>
+          <div style={{ fontSize:22, fontWeight:900, color:"#fff", letterSpacing:"-1px" }}>{total}</div>
+          <div style={{ fontSize:11, color:"#94A3B8", fontWeight:600, marginTop:1 }}>Łącznie</div>
+        </div>
+        {donePct!==null && (
+          <div style={{ padding:"12px 20px", borderRadius:14, background:"#fff", border:"1px solid #E2E8F0", minWidth:165, display:"flex", flexDirection:"column", justifyContent:"center", gap:7 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <span style={{ fontSize:11, fontWeight:700, color:"#64748B", textTransform:"uppercase", letterSpacing:".06em" }}>Postęp</span>
+              <span style={{ fontSize:16, fontWeight:900, color:"#0F172A" }}>{donePct}%</span>
+            </div>
+            <ProgressBar value={donePct} color="#10B981"/>
+          </div>
+        )}
+        {testSummary && (
+          <div style={{ padding:"12px 18px", borderRadius:14, background:"#fff", border:"1px solid #E2E8F0", display:"flex", flexDirection:"column", gap:8, minWidth:230 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:"#64748B", textTransform:"uppercase", letterSpacing:".06em" }}>🧪 Wyniki testów</div>
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+              {[
+                { key:"pass",     label:"Przeszły",  color:"#065F46", bg:"#D1FAE5", dot:"#10B981" },
+                { key:"fail",     label:"Błąd",      color:"#991B1B", bg:"#FEE2E2", dot:"#EF4444" },
+                { key:"running",  label:"W trakcie", color:"#854D0E", bg:"#FEF9C3", dot:"#EAB308" },
+                { key:"skipped",  label:"Pominięte", color:"#6B21A8", bg:"#F3E8FF", dot:"#A855F7" },
+                { key:"untested", label:"Brak",      color:"#475569", bg:"#F1F5F9", dot:"#94A3B8" },
+              ].filter(s=>testSummary[s.key]>0).map(s=>(
+                <div key={s.key} style={{ display:"flex", alignItems:"center", gap:5, padding:"3px 10px", borderRadius:20, background:s.bg }}>
+                  <span style={{ width:6, height:6, borderRadius:"50%", background:s.dot }}/>
+                  <span style={{ fontSize:13, fontWeight:800, color:s.color }}>{testSummary[s.key]}</span>
+                  <span style={{ fontSize:10, color:s.color, opacity:.75 }}>{s.label}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ display:"flex", height:5, borderRadius:99, overflow:"hidden", gap:1 }}>
+              {testSummary.pass>0    && <div style={{ flex:testSummary.pass,     background:"#10B981" }}/>}
+              {testSummary.fail>0    && <div style={{ flex:testSummary.fail,     background:"#EF4444" }}/>}
+              {testSummary.running>0 && <div style={{ flex:testSummary.running,  background:"#EAB308" }}/>}
+              {testSummary.skipped>0 && <div style={{ flex:testSummary.skipped,  background:"#A855F7" }}/>}
+              {testSummary.untested>0&& <div style={{ flex:testSummary.untested, background:"#E2E8F0" }}/>}
+            </div>
+          </div>
+        )}
+        {checkCols.map(c => {
+          const pct = total ? Math.round(sheet.rows.filter(r=>r[c.id]).length/total*100) : 0;
+          return (
+            <div key={c.id} style={{ padding:"12px 20px", borderRadius:14, background:"linear-gradient(135deg,#6B21A8,#7C3AED)", boxShadow:"0 4px 14px #A855F744" }}>
+              <div style={{ fontSize:22, fontWeight:900, color:"#fff", letterSpacing:"-1px" }}>{pct}%</div>
+              <div style={{ fontSize:11, color:"#E9D5FF", fontWeight:600, marginTop:1 }}>{c.name}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Table */}
+      <div style={{ borderRadius:16, overflow:"hidden", boxShadow:"0 8px 32px rgba(0,0,0,.12)", border:"1px solid #E2E8F0" }}>
+        <div style={{ overflowX:"auto" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", background:"#fff" }}>
+            <thead>
+              <tr>
+                {sheet.columns.map((col,ci) => (
+                  <th key={col.id} style={H}>
+                    <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                      <span style={{ fontSize:10, opacity:.45 }}>
+                        {col.type==="status"?"🎯":col.type==="test"?"🧪":col.type==="checkbox"?"☑️":col.type==="select"?"📋":col.type==="number"?"🔢":""}
+                      </span>
+                      {editingHeader===col.id ? (
+                        <input autoFocus value={col.name}
+                          onBlur={()=>setEditingHeader(null)}
+                          onKeyDown={e=>e.key==="Enter"&&setEditingHeader(null)}
+                          onChange={e=>onChange({...sheet,columns:sheet.columns.map((c,i)=>i===ci?{...c,name:e.target.value}:c)})}
+                          style={{ border:"1px solid #3B82F6", borderRadius:4, padding:"2px 6px", fontSize:11, fontFamily:"inherit", fontWeight:700, color:"#fff", background:"#1E293B", width:100 }}/>
+                      ) : (
+                        <span onDoubleClick={()=>setEditingHeader(col.id)} style={{ cursor:"default" }}>{col.name}</span>
+                      )}
+                      <div style={{ display:"flex", gap:1, marginLeft:"auto" }}>
+                        <button onClick={()=>setColModal({col,idx:ci,isNew:false})}
+                          style={{ border:"none", background:"none", cursor:"pointer", color:"#475569", fontSize:10, padding:"2px 4px", borderRadius:4 }}
+                          onMouseEnter={e=>e.currentTarget.style.background="#334155"}
+                          onMouseLeave={e=>e.currentTarget.style.background="none"}>✏️</button>
+                        <button onClick={()=>deleteCol(ci)}
+                          style={{ border:"none", background:"none", cursor:"pointer", color:"#475569", fontSize:10, padding:"2px 4px", borderRadius:4 }}
+                          onMouseEnter={e=>e.currentTarget.style.background="#334155"}
+                          onMouseLeave={e=>e.currentTarget.style.background="none"}>🗑</button>
+                      </div>
+                    </div>
+                  </th>
+                ))}
+                <th style={{ ...H, width:44 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {sheet.rows.map((row,ri) => (
+                <tr key={row.id}
+                  onMouseEnter={()=>setHoveredRow(row.id)}
+                  onMouseLeave={()=>setHoveredRow(null)}
+                  style={{ background:hoveredRow===row.id?"#F0F9FF":ri%2===0?"#fff":"#FAFBFF", transition:"background .1s" }}>
+                  {sheet.columns.map(col => (
+                    <td key={col.id} style={{ ...C, textAlign:col.type==="checkbox"?"center":"left" }}>
+                      {col.type==="test" ? (
+                        <TestCell value={row[col.id]} onChange={v=>updateRow(row.id,col.id,v)}/>
+                      ) : col.type==="status" ? (
+                        <StatusCell value={row[col.id]} options={col.options} onChange={v=>updateRow(row.id,col.id,v)}/>
+                      ) : col.type==="checkbox" ? (
+                        <CheckCell value={!!row[col.id]} onChange={v=>updateRow(row.id,col.id,v)}/>
+                      ) : col.type==="select" ? (
+                        <select value={row[col.id]||""} onChange={e=>updateRow(row.id,col.id,e.target.value)}
+                          style={{ border:"1px solid #E2E8F0", padding:"5px 10px", borderRadius:8, fontSize:12, fontFamily:"inherit", background:"#fff", cursor:"pointer" }}>
+                          {(col.options||[]).map(o=><option key={o}>{o}</option>)}
+                        </select>
+                      ) : col.type==="number" ? (
+                        <input type="number" value={row[col.id]||""} onChange={e=>updateRow(row.id,col.id,e.target.value)}
+                          style={{ border:"1px solid transparent", padding:"3px 6px", borderRadius:6, width:80, background:"transparent", fontFamily:"inherit", fontSize:13 }}/>
+                      ) : (
+                        <input type="text" value={row[col.id]||""} onChange={e=>updateRow(row.id,col.id,e.target.value)}
+                          style={{ border:"1px solid transparent", padding:"3px 6px", borderRadius:6, width:"100%", minWidth:70, background:"transparent", fontFamily:"inherit", fontSize:13 }}
+                          onFocus={e=>e.currentTarget.style.borderColor="#CBD5E1"}
+                          onBlur={e=>e.currentTarget.style.borderColor="transparent"}/>
+                      )}
+                    </td>
+                  ))}
+                  <td style={{ ...C, textAlign:"center", opacity:hoveredRow===row.id?1:0, transition:"opacity .15s" }}>
+                    <button onClick={()=>deleteRow(row.id)} style={{ border:"none", background:"#FEE2E2", cursor:"pointer", color:"#EF4444", fontSize:11, padding:"4px 7px", borderRadius:6, fontWeight:700 }}>✕</button>
+                  </td>
+                </tr>
+              ))}
+              {total===0 && (
+                <tr><td colSpan={sheet.columns.length+1} style={{ padding:"40px", textAlign:"center", color:"#94A3B8", fontSize:14 }}>
+                  Brak wierszy — kliknij „+ Dodaj wiersz"
+                </td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ padding:"12px 16px", background:"#F8FAFC", borderTop:"1px solid #F1F5F9", display:"flex", gap:10 }}>
+          {[
+            { label:"+ Dodaj wiersz",  fn:addRow,                                                         hBg:"#EFF6FF", hBor:"#3B82F6", hCol:"#1D4ED8" },
+            { label:"+ Dodaj kolumnę", fn:()=>setColModal({col:{name:"",type:"text"},isNew:true}),         hBg:"#F0FDF4", hBor:"#10B981", hCol:"#065F46" },
+          ].map(b => (
+            <button key={b.label} onClick={b.fn}
+              style={{ border:"1.5px dashed #CBD5E1", background:"transparent", color:"#94A3B8", padding:"6px 16px", borderRadius:8, cursor:"pointer", fontSize:13, fontFamily:"inherit", fontWeight:600, transition:"all .15s" }}
+              onMouseEnter={e=>{ e.currentTarget.style.background=b.hBg; e.currentTarget.style.borderColor=b.hBor; e.currentTarget.style.color=b.hCol; }}
+              onMouseLeave={e=>{ e.currentTarget.style.background="transparent"; e.currentTarget.style.borderColor="#CBD5E1"; e.currentTarget.style.color="#94A3B8"; }}>
+              {b.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── ROOT APP ───────────────────────────────────────────────────────────────────
+function App() {
+  const [sheets, setSheets] = useState(()=>loadData());
+  const [activeId, setActiveId] = useState(()=>loadData()[0]?.id);
+  const [editingTab, setEditingTab] = useState(null);
+  const [newSheetMode, setNewSheetMode] = useState(false);
+  const [newSheetName, setNewSheetName] = useState("");
+
+  useEffect(()=>{ saveData(sheets); },[sheets]);
+
+  const active = sheets.find(s=>s.id===activeId)||sheets[0];
+  const updateSheet = s => setSheets(p=>p.map(x=>x.id===s.id?s:x));
+
+  const releaseSheet = sheets.find(s=>s.id==="sheet_release_tasks");
+  const releaseHealth = releaseSheet ? (() => {
+    const t=releaseSheet.rows.length; if(!t) return 0;
+    const be=releaseSheet.columns.find(c=>c.id==="col_be");
+    const fe=releaseSheet.columns.find(c=>c.id==="col_fe");
+    const tc=releaseSheet.columns.find(c=>c.id==="col_testy");
+    let score=0;
+    releaseSheet.rows.forEach(r=>{ let pts=0; if(r[be?.id]==="Zakończone")pts++; if(r[fe?.id]==="Zakończone")pts++; if(tc&&r[tc.id]?.state==="pass")pts++; score+=pts/3; });
+    return Math.round(score/t*100);
+  })() : 0;
+
+  const hColor = releaseHealth>70?"#34D399":releaseHealth>40?"#FCD34D":"#F87171";
+  const hGlow  = releaseHealth>70?"#10B98166":releaseHealth>40?"#EAB30866":"#EF444466";
+
+  const addSheet = () => {
+    if (!newSheetName.trim()) return;
+    const s={ id:mkId(), name:"📄 "+newSheetName.trim(), icon:"📄",
+      columns:[{id:mkId(),name:"Nazwa",type:"text"},{id:mkId(),name:"Status",type:"status",options:STATUS_OPTS},{id:mkId(),name:"Testy",type:"test"}], rows:[] };
+    setSheets(p=>[...p,s]); setActiveId(s.id); setNewSheetName(""); setNewSheetMode(false);
+  };
+
+  const deleteSheet = id => {
+    if (sheets.length===1) return;
+    const rest=sheets.filter(s=>s.id!==id);
+    setSheets(rest); if(activeId===id) setActiveId(rest[0].id);
+  };
+
+  return (
+    <div style={{ minHeight:"100vh", background:"#EEF2FF", fontFamily:"'Segoe UI',system-ui,sans-serif" }}>
+      {/* TOPBAR */}
+      <div style={{ background:"linear-gradient(135deg,#0F172A,#1E293B)", boxShadow:"0 4px 24px rgba(0,0,0,.35)" }}>
+        <div style={{ padding:"14px 28px", display:"flex", alignItems:"center", justifyContent:"space-between", borderBottom:"1px solid #1E293B" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+            <div style={{ width:38, height:38, borderRadius:11, background:"linear-gradient(135deg,#3B82F6,#8B5CF6)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, boxShadow:"0 4px 14px #3B82F644" }}>📋</div>
+            <div>
+              <div style={{ color:"#fff", fontWeight:900, fontSize:17, letterSpacing:"-.3px" }}>Release Tracker</div>
+              <div style={{ color:"#475569", fontSize:11 }}>Zarządzanie zadaniami i checklistą release</div>
+            </div>
+          </div>
+          {releaseSheet && (
+            <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+              <div>
+                <div style={{ color:"#475569", fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:".06em", marginBottom:5, textAlign:"right" }}>Release Health</div>
+                <div style={{ width:150, height:6, background:"#1E293B", borderRadius:99, overflow:"hidden" }}>
+                  <div style={{ height:"100%", width:`${releaseHealth}%`, background:`linear-gradient(90deg,${hColor},${hColor}cc)`, borderRadius:99, transition:"width .8s cubic-bezier(.4,0,.2,1)", boxShadow:`0 0 8px ${hGlow}` }}/>
+                </div>
+              </div>
+              <div style={{ fontSize:24, fontWeight:900, color:hColor, letterSpacing:"-1.5px", textShadow:`0 0 20px ${hGlow}` }}>{releaseHealth}%</div>
+            </div>
+          )}
+        </div>
+        {/* TABS */}
+        <div style={{ padding:"0 20px", display:"flex", alignItems:"stretch", overflowX:"auto", gap:2 }}>
+          {sheets.map(s => {
+            const isA=activeId===s.id;
+            return (
+              <div key={s.id} onClick={()=>setActiveId(s.id)}
+                style={{ display:"flex", alignItems:"center", gap:8, padding:"0 16px", cursor:"pointer", flexShrink:0,
+                  borderBottom:isA?"3px solid #60A5FA":"3px solid transparent",
+                  background:isA?"rgba(96,165,250,.08)":"transparent", transition:"background .15s" }}>
+                <span style={{ fontSize:14 }}>{s.icon||"📄"}</span>
+                {editingTab===s.id ? (
+                  <input autoFocus value={s.name.replace(/^\S+\s/,"")}
+                    onBlur={()=>setEditingTab(null)}
+                    onKeyDown={e=>e.key==="Enter"&&setEditingTab(null)}
+                    onChange={e=>setSheets(p=>p.map(x=>x.id===s.id?{...x,name:(s.icon||"📄")+" "+e.target.value}:x))}
+                    style={{ border:"1px solid #60A5FA", background:"transparent", color:"#fff", fontSize:13, fontFamily:"inherit", borderRadius:4, padding:"2px 6px", width:130 }}/>
+                ) : (
+                  <span onDoubleClick={()=>setEditingTab(s.id)}
+                    style={{ color:isA?"#F8FAFC":"#94A3B8", fontSize:13, fontWeight:isA?700:500, padding:"16px 0" }}>
+                    {s.name.replace(/^\S+\s/,"")}
+                  </span>
+                )}
+                {sheets.length>1 && (
+                  <button onClick={e=>{ e.stopPropagation(); deleteSheet(s.id); }}
+                    style={{ border:"none", background:"none", color:"#334155", cursor:"pointer", fontSize:11, padding:"1px 4px", borderRadius:4 }}
+                    onMouseEnter={e=>e.currentTarget.style.color="#F87171"}
+                    onMouseLeave={e=>e.currentTarget.style.color="#334155"}>✕</button>
+                )}
+              </div>
+            );
+          })}
+          {newSheetMode ? (
+            <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 12px" }}>
+              <input autoFocus value={newSheetName} onChange={e=>setNewSheetName(e.target.value)}
+                onKeyDown={e=>{ if(e.key==="Enter")addSheet(); if(e.key==="Escape")setNewSheetMode(false); }}
+                placeholder="Nazwa arkusza..." style={{ border:"1px solid #60A5FA", background:"rgba(255,255,255,.08)", color:"#fff", fontSize:13, borderRadius:8, padding:"5px 12px", fontFamily:"inherit", width:170 }}/>
+              <button onClick={addSheet} style={{ border:"none", background:"#10B981", color:"#fff", borderRadius:7, padding:"5px 12px", cursor:"pointer", fontSize:13, fontWeight:600 }}>✓</button>
+              <button onClick={()=>setNewSheetMode(false)} style={{ border:"none", background:"#475569", color:"#fff", borderRadius:7, padding:"5px 12px", cursor:"pointer", fontSize:13 }}>✕</button>
+            </div>
+          ) : (
+            <button onClick={()=>setNewSheetMode(true)}
+              style={{ border:"none", background:"transparent", color:"#475569", cursor:"pointer", fontSize:24, padding:"0 14px", fontWeight:300, lineHeight:1, transition:"color .15s" }}
+              onMouseEnter={e=>e.currentTarget.style.color="#60A5FA"}
+              onMouseLeave={e=>e.currentTarget.style.color="#475569"}>+</button>
+          )}
+        </div>
+      </div>
+
+      {/* CONTENT */}
+      <div style={{ padding:"28px", maxWidth:1440, margin:"0 auto" }}>
+        {active && (
+          <div key={active.id} style={{ animation:"slideIn .2s ease" }}>
+            <div style={{ marginBottom:22 }}>
+              <h1 style={{ fontSize:24, fontWeight:900, color:"#0F172A", letterSpacing:"-.5px", margin:0 }}>{active.name}</h1>
+              <p style={{ color:"#94A3B8", fontSize:12, margin:"5px 0 0" }}>
+                💡 Dwuklik na zakładkę lub nagłówek aby edytować · 🧪 <strong>Testy</strong> = kliknij badge aby zmienić status + wpisz notatkę obok
+              </p>
+            </div>
+            <SheetView sheet={active} onChange={updateSheet}/>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
