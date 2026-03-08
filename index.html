@@ -20,34 +20,38 @@ input,textarea,select{outline:none;}
 ::-webkit-scrollbar{height:4px;width:4px;}
 ::-webkit-scrollbar-track{background:#1E293B;}
 ::-webkit-scrollbar-thumb{background:#334155;border-radius:2px;}
-.row-hover:hover{background:#F0F9FF !important;}
+.row-hover:hover{background:#EFF6FF !important;}
 .row-hover:hover .row-num{opacity:1 !important;}
-.proj-item:hover{background:rgba(255,255,255,.06) !important;}
-.tab-item:hover{background:rgba(96,165,250,.06) !important;}
+.proj-item:hover{background:rgba(255,255,255,.07) !important;}
+.tab-pill:hover{background:rgba(96,165,250,.08) !important;}
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const {useState, useEffect, useRef, useCallback} = React;
+var useState = React.useState;
+var useEffect = React.useEffect;
+var useRef = React.useRef;
+var useCallback = React.useCallback;
 
-const API_URL = "https://script.google.com/macros/s/AKfycbynq8YaWYZjhNYR1dHsi4tLoA5YKGfif9xcF_xdHbGy91CWJuf0wL4hwY6mEn97769M/exec";
+var ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
+var SHEETS_API = "https://script.google.com/macros/s/AKfycbynq8YaWYZjhNYR1dHsi4tLoA5YKGfif9xcF_xdHbGy91CWJuf0wL4hwY6mEn97769M/exec";
 
-const STATUS_OPTS = [
+var STATUS_OPTS = [
   {label:"Zakończone",     bg:"#D1FAE5",color:"#065F46",dot:"#10B981",border:"#6EE7B7"},
   {label:"W toku",         bg:"#E0F2FE",color:"#075985",dot:"#0EA5E9",border:"#7DD3FC"},
   {label:"Nie rozpoczęte", bg:"#FEE2E2",color:"#991B1B",dot:"#EF4444",border:"#FCA5A5"},
   {label:"Wstrzymane",     bg:"#DBEAFE",color:"#1E3A8A",dot:"#3B82F6",border:"#93C5FD"},
   {label:"Do wyjaśnienia", bg:"#FEF9C3",color:"#854D0E",dot:"#EAB308",border:"#FDE047"},
 ];
-const TEST_STATES = [
+var TEST_STATES = [
   {key:"untested",label:"Nie testowano",icon:"○",bg:"#F8FAFC",color:"#94A3B8",border:"#E2E8F0",dot:"#CBD5E1"},
   {key:"pass",    label:"Przeszły",     icon:"✓",bg:"#D1FAE5",color:"#065F46",border:"#6EE7B7",dot:"#10B981"},
   {key:"fail",    label:"Nie przeszły", icon:"✕",bg:"#FEE2E2",color:"#991B1B",border:"#FCA5A5",dot:"#EF4444"},
   {key:"running", label:"W trakcie",    icon:"▶",bg:"#FEF9C3",color:"#854D0E",border:"#FDE047",dot:"#EAB308"},
   {key:"skipped", label:"Pominięte",    icon:"⏭",bg:"#F3E8FF",color:"#6B21A8",border:"#D8B4FE",dot:"#A855F7"},
 ];
-const PALETTE = [
+var PALETTE = [
   {bg:"#D1FAE5",color:"#065F46",dot:"#10B981",border:"#6EE7B7"},
   {bg:"#FEE2E2",color:"#991B1B",dot:"#EF4444",border:"#FCA5A5"},
   {bg:"#DBEAFE",color:"#1E3A8A",dot:"#3B82F6",border:"#93C5FD"},
@@ -57,26 +61,28 @@ const PALETTE = [
   {bg:"#FFE4E6",color:"#9F1239",dot:"#F43F5E",border:"#FCA5A5"},
   {bg:"#FEF3C7",color:"#92400E",dot:"#F59E0B",border:"#FCD34D"},
 ];
-const PROJECT_COLORS = ["#3B82F6","#10B981","#F59E0B","#EF4444","#8B5CF6","#EC4899","#14B8A6","#F97316"];
-const PROJECT_EMOJIS = ["🚀","💼","🛒","🏗️","⚡","🔥","💎","🌟","🎯","🛡️","🎨","🔧"];
+var PROJECT_COLORS = ["#3B82F6","#10B981","#F59E0B","#EF4444","#8B5CF6","#EC4899","#14B8A6","#F97316"];
+var PROJECT_EMOJIS = ["🚀","💼","🛒","🏗️","⚡","🔥","💎","🌟","🎯","🛡️","🎨","🔧"];
 
-const mkId = () => "id_" + Date.now() + "_" + Math.random().toString(36).slice(2,7);
-const emptyTest = () => ({state:"untested", note:""});
+function mkId() { return "id_" + Date.now() + "_" + Math.random().toString(36).slice(2,7); }
+function emptyTest() { return {state:"untested",note:""}; }
 
-const mkChecklistSheet = (rows) => ({
-  id: mkId(), name:"✅ Checklist", icon:"✅",
-  columns:[
-    {id:"col_func",  name:"Funkcjonalność", type:"text"},
-    {id:"col_opis",  name:"Opis",           type:"text"},
-    {id:"col_status",name:"Status",         type:"status", options:STATUS_OPTS},
-    {id:"col_testy", name:"Testy",          type:"test"},
-    {id:"col_kom",   name:"Komentarz",      type:"text", comment:true},
-    {id:"col_pokr",  name:"Pokrycie",       type:"checkbox"},
-  ],
-  rows: rows
-});
+function mkChecklistSheet(rows) {
+  return {
+    id: mkId(), name:"✅ Checklist", icon:"✅",
+    columns:[
+      {id:"col_func",  name:"Funkcjonalność", type:"text"},
+      {id:"col_opis",  name:"Opis",           type:"text"},
+      {id:"col_status",name:"Status",         type:"status", options:STATUS_OPTS},
+      {id:"col_testy", name:"Testy",          type:"test"},
+      {id:"col_kom",   name:"Komentarz",      type:"text", comment:true},
+      {id:"col_pokr",  name:"Pokrycie",       type:"checkbox"},
+    ],
+    rows: rows || []
+  };
+}
 
-const defaultProjects = [
+var defaultProjects = [
   {
     id:"proj_default", name:"E-commerce Platform", emoji:"🛒", color:"#3B82F6",
     sheets:[
@@ -109,13 +115,13 @@ const defaultProjects = [
         ]
       },
       mkChecklistSheet([
-        {id:mkId(),col_func:"Logowanie",              col_opis:"Sprawdzenie logowania i komunikatów błędu.",   col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
-        {id:mkId(),col_func:"Rejestracja",             col_opis:"Sprawdzenie rejestracji i walidacji pól.",    col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
-        {id:mkId(),col_func:"Ustawienia konta",        col_opis:"Sprawdzenie edycji danych i adresów.",        col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
-        {id:mkId(),col_func:"Wszystkie zakładki",      col_opis:"Sprawdzenie działania wszystkich sekcji.",    col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
-        {id:mkId(),col_func:"Homepage",                col_opis:"Sprawdzenie homepage i motywu jasny/ciemny.", col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
-        {id:mkId(),col_func:"Produkty",                col_opis:"Sprawdzenie listy produktów i kart produktu.",col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
-        {id:mkId(),col_func:"Wyszukiwanie produktów",  col_opis:"Sprawdzenie działania wyszukiwarki.",         col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
+        {id:mkId(),col_func:"Logowanie",             col_opis:"Sprawdzenie logowania i komunikatów błędu.",   col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
+        {id:mkId(),col_func:"Rejestracja",            col_opis:"Sprawdzenie rejestracji i walidacji pól.",    col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
+        {id:mkId(),col_func:"Ustawienia konta",       col_opis:"Sprawdzenie edycji danych i adresów.",        col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
+        {id:mkId(),col_func:"Wszystkie zakładki",     col_opis:"Sprawdzenie działania wszystkich sekcji.",    col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
+        {id:mkId(),col_func:"Homepage",               col_opis:"Sprawdzenie homepage i motywu jasny/ciemny.", col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
+        {id:mkId(),col_func:"Produkty",               col_opis:"Sprawdzenie listy produktów i kart produktu.",col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
+        {id:mkId(),col_func:"Wyszukiwanie produktów", col_opis:"Sprawdzenie działania wyszukiwarki.",         col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
       ])
     ]
   }
@@ -123,9 +129,9 @@ const defaultProjects = [
 
 async function loadData() {
   try {
-    const r = await fetch(API_URL);
-    const text = await r.text();
-    const parsed = JSON.parse(text);
+    var r = await fetch(SHEETS_API);
+    var text = await r.text();
+    var parsed = JSON.parse(text);
     if (parsed && parsed.projects && Array.isArray(parsed.projects) && parsed.projects.length > 0) return parsed.projects;
     if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].columns) {
       return [{id:mkId(),name:"Mój Projekt",emoji:"📋",color:"#3B82F6",sheets:parsed}];
@@ -134,19 +140,22 @@ async function loadData() {
   } catch(e) { return defaultProjects; }
 }
 async function saveData(projects) {
-  try { await fetch(API_URL, {method:"POST", mode:"no-cors", body:JSON.stringify({projects})}); } catch(e) {}
+  try { await fetch(SHEETS_API, {method:"POST",mode:"no-cors",body:JSON.stringify({projects:projects})}); } catch(e) {}
 }
 
-// ── PORTAL DROPDOWN HOOK ─────────────────────────────────────────────────────
+// ── PORTAL DROPDOWN HOOK ──────────────────────────────────────────────────────
 function usePortalDropdown(triggerRef, open) {
-  const [style, setStyle] = useState({position:"fixed",top:0,left:0,bottom:"auto"});
+  var initial = {position:"fixed",top:0,left:0,bottom:"auto"};
+  var pair = useState(initial);
+  var style = pair[0];
+  var setStyle = pair[1];
   useEffect(function() {
     if (open && triggerRef.current) {
       var r = triggerRef.current.getBoundingClientRect();
       var spaceBelow = window.innerHeight - r.bottom;
       var goUp = spaceBelow < 300;
       setStyle({
-        position: "fixed",
+        position:"fixed",
         top: goUp ? "auto" : r.bottom + 6,
         bottom: goUp ? (window.innerHeight - r.top + 6) : "auto",
         left: Math.max(8, Math.min(r.left, window.innerWidth - 320)),
@@ -157,8 +166,9 @@ function usePortalDropdown(triggerRef, open) {
 }
 
 // ── STATUS CELL ──────────────────────────────────────────────────────────────
-function StatusCell({value, options, onChange}) {
-  var [open, setOpen] = useState(false);
+function StatusCell(props) {
+  var value = props.value; var options = props.options; var onChange = props.onChange;
+  var pair = useState(false); var open = pair[0]; var setOpen = pair[1];
   var ref = useRef();
   var opts = options || STATUS_OPTS;
   var opt = opts.find(function(o){return o.label===value;}) || opts[0];
@@ -200,7 +210,7 @@ function StatusCell({value, options, onChange}) {
                   borderLeft:"3px solid "+(value===o.label?o.dot:"transparent")}}
                 onMouseEnter={function(e){if(value!==o.label)e.currentTarget.style.background="#F8FAFC";}}
                 onMouseLeave={function(e){if(value!==o.label)e.currentTarget.style.background="transparent";}}>
-                <span style={{width:9,height:9,borderRadius:"50%",background:o.dot}}/>
+                <span style={{width:9,height:9,borderRadius:"50%",background:o.dot,flexShrink:0}}/>
                 <span style={{color:o.color,fontWeight:700,fontSize:13}}>{o.label}</span>
                 {value===o.label && <span style={{marginLeft:"auto",color:o.dot,fontSize:12,fontWeight:900}}>✓</span>}
               </div>
@@ -212,10 +222,11 @@ function StatusCell({value, options, onChange}) {
   );
 }
 
-// ── TEST CELL ────────────────────────────────────────────────────────────────
-function TestCell({value, onChange}) {
+// ── TEST CELL ─────────────────────────────────────────────────────────────────
+function TestCell(props) {
+  var value = props.value; var onChange = props.onChange;
   var val = (value && typeof value==="object") ? value : emptyTest();
-  var [open, setOpen] = useState(false);
+  var pair = useState(false); var open = pair[0]; var setOpen = pair[1];
   var ref = useRef();
   var state = TEST_STATES.find(function(t){return t.key===val.state;}) || TEST_STATES[0];
   var dropStyle = usePortalDropdown(ref, open);
@@ -260,7 +271,7 @@ function TestCell({value, onChange}) {
                 <div>
                   <div style={{color:t.color,fontWeight:800,fontSize:13}}>{t.label}</div>
                   <div style={{color:t.dot,fontSize:10,opacity:.7,marginTop:1}}>
-                    {t.key==="pass"?"Testy zakończone sukcesem":t.key==="fail"?"Wykryto błędy do poprawki":t.key==="running"?"Testy w toku":t.key==="skipped"?"Pominięto testy":"Jeszcze nie testowano"}
+                    {t.key==="pass"?"Zakończone sukcesem":t.key==="fail"?"Wykryto błędy":t.key==="running"?"Testy w toku":t.key==="skipped"?"Pominięto":"Jeszcze nie testowano"}
                   </div>
                 </div>
                 {val.state===t.key && <span style={{marginLeft:"auto",width:22,height:22,borderRadius:"50%",background:t.dot,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontWeight:900,flexShrink:0}}>✓</span>}
@@ -274,25 +285,25 @@ function TestCell({value, onChange}) {
   );
 }
 
-// ── COMMENT CELL ─────────────────────────────────────────────────────────────
-function CommentCell({value, onChange}) {
-  var [open, setOpen] = useState(false);
-  var [draft, setDraft] = useState(value);
-  var [pos, setPos] = useState({top:0,left:0});
-  var btnRef = useRef();
-  var taRef = useRef();
+// ── COMMENT CELL ──────────────────────────────────────────────────────────────
+function CommentCell(props) {
+  var value = props.value; var onChange = props.onChange;
+  var pair = useState(false); var open = pair[0]; var setOpen = pair[1];
+  var p2 = useState(value); var draft = p2[0]; var setDraft = p2[1];
+  var p3 = useState({top:0,left:0}); var pos = p3[0]; var setPos = p3[1];
+  var btnRef = useRef(); var taRef = useRef();
   var openPanel = function() {
     setDraft(value);
     if (btnRef.current) {
       var r = btnRef.current.getBoundingClientRect();
       var spaceBelow = window.innerHeight - r.bottom;
       setPos({
-        top: spaceBelow > 280 ? r.bottom + 6 : r.top - 300,
+        top: spaceBelow > 280 ? r.bottom + 6 : r.top - 308,
         left: Math.max(8, Math.min(r.left, window.innerWidth - 330)),
       });
     }
     setOpen(true);
-    setTimeout(function(){if(taRef.current) taRef.current.focus();}, 50);
+    setTimeout(function(){if(taRef.current)taRef.current.focus();}, 50);
   };
   var save = function(){onChange(draft);setOpen(false);};
   var cancel = function(){setDraft(value);setOpen(false);};
@@ -370,14 +381,15 @@ function CommentCell({value, onChange}) {
   );
 }
 
-// ── URL CELL ─────────────────────────────────────────────────────────────────
-function UrlCell({value, onChange}) {
+// ── URL CELL ──────────────────────────────────────────────────────────────────
+function UrlCell(props) {
+  var value = props.value; var onChange = props.onChange;
   var val = (value && typeof value==="object") ? value : {label:"",url:""};
-  var [open, setOpen] = useState(false);
-  var [dLabel, setDLabel] = useState(val.label);
-  var [dUrl, setDUrl] = useState(val.url);
+  var pair = useState(false); var open = pair[0]; var setOpen = pair[1];
+  var p2 = useState(val.label); var dLabel = p2[0]; var setDLabel = p2[1];
+  var p3 = useState(val.url); var dUrl = p3[0]; var setDUrl = p3[1];
+  var p4 = useState({top:0,left:0}); var pos = p4[0]; var setPos = p4[1];
   var btnRef = useRef();
-  var [pos, setPos] = useState({top:0,left:0});
   var openPanel = function() {
     setDLabel(val.label); setDUrl(val.url);
     if (btnRef.current) {
@@ -424,7 +436,7 @@ function UrlCell({value, onChange}) {
           <div style={{padding:"14px 16px",display:"flex",flexDirection:"column",gap:10}}>
             <div>
               <label style={{fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em",display:"block",marginBottom:5}}>Etykieta</label>
-              <input value={dLabel} onChange={function(e){setDLabel(e.target.value);}} placeholder="np. PROJ-101, Figma Design…"
+              <input value={dLabel} onChange={function(e){setDLabel(e.target.value);}} placeholder="np. PROJ-101, Figma…"
                 style={{width:"100%",border:"1.5px solid #E2E8F0",borderRadius:8,padding:"8px 12px",fontSize:13,fontFamily:"inherit"}}
                 onFocus={function(e){e.currentTarget.style.borderColor="#3B82F6";}} onBlur={function(e){e.currentTarget.style.borderColor="#E2E8F0";}}/>
             </div>
@@ -447,8 +459,8 @@ function UrlCell({value, onChange}) {
   );
 }
 
-// ── CHECK CELL ───────────────────────────────────────────────────────────────
-function CheckCell({value, onChange}) {
+function CheckCell(props) {
+  var value = props.value; var onChange = props.onChange;
   return (
     <div onClick={function(){onChange(!value);}} style={{
       width:28,height:28,borderRadius:8,cursor:"pointer",margin:"0 auto",
@@ -458,13 +470,13 @@ function CheckCell({value, onChange}) {
       boxShadow:value?"0 0 8px #10B98144":"none"
     }}>
       {value ? <span style={{color:"#065F46",fontSize:14,fontWeight:900}}>✓</span>
-             : <span style={{color:"#CBD5E1",fontSize:12,fontWeight:700}}>○</span>}
+             : <span style={{color:"#CBD5E1",fontSize:12}}>○</span>}
     </div>
   );
 }
 
-function ProgressBar({value, color}) {
-  color = color || "#10B981";
+function ProgressBar(props) {
+  var value = props.value; var color = props.color || "#10B981";
   return (
     <div style={{height:5,background:"#F1F5F9",borderRadius:99,overflow:"hidden"}}>
       <div style={{height:"100%",width:value+"%",background:color,borderRadius:99,transition:"width .6s"}}/>
@@ -472,131 +484,175 @@ function ProgressBar({value, color}) {
   );
 }
 
-// ── IMPORT MODAL ─────────────────────────────────────────────────────────────
-function ImportModal({columns, onImport, onClose}) {
-  var [text, setText] = useState("");
-  var [separator, setSeparator] = useState("tab");
-  var [preview, setPreview] = useState([]);
-  var [headers, setHeaders] = useState([]);
-  var [mapping, setMapping] = useState({});
-  var [step, setStep] = useState(1);
+// ── AI SMART PASTE MODAL ──────────────────────────────────────────────────────
+function SmartPasteModal(props) {
+  var columns = props.columns; var onImport = props.onImport; var onClose = props.onClose;
+  var p1 = useState(""); var text = p1[0]; var setText = p1[1];
+  var p2 = useState(null); var preview = p2[0]; var setPreview = p2[1];
+  var p3 = useState(false); var loading = p3[0]; var setLoading = p3[1];
+  var p4 = useState(""); var error = p4[0]; var setError = p4[1];
+  var p5 = useState("manual"); var mode = p5[0]; var setMode = p5[1];
   var fileRef = useRef();
 
-  var parseText = function(raw, sep) {
-    var lines = raw.trim().split("\n").filter(function(l){return l.trim();});
-    if (!lines.length) return;
-    var delim = sep==="tab"?"\t":sep==="comma"?",":sep==="semicolon"?";":"|";
-    var parsed = lines.map(function(l){
-      return l.split(delim).map(function(c){return c.trim().replace(/^["']|["']$/g,"");});
-    });
-    var firstRow = parsed[0];
-    var colCount = Math.max.apply(null, parsed.map(function(r){return r.length;}));
-    var autoHeaders = firstRow.map(function(h,i){
-      var lower = (h||"").toLowerCase();
-      if(lower.includes("funkc")||lower.includes("nazwa")||lower.includes("feature")) return "Funkcjonalność";
-      if(lower.includes("opis")||lower.includes("desc")) return "Opis";
-      if(lower.includes("status")) return "Status";
-      if(lower.includes("task")||lower.includes("ticket")||lower.includes("jira")) return "Task";
-      if(lower.includes("kom")||lower.includes("note")||lower.includes("uwag")) return "Komentarz";
-      return h || ("Kolumna "+(i+1));
-    });
-    var looksLikeHeader = firstRow.some(function(h){
-      return isNaN(h) && h.length < 30 && h===h;
-    });
-    if (looksLikeHeader) {
-      setHeaders(autoHeaders);
-      setPreview(parsed.slice(1));
-      var m = {};
-      columns.forEach(function(col) {
-        autoHeaders.forEach(function(h,i) {
-          if(h.toLowerCase()===col.name.toLowerCase()) m[i]=col.id;
-        });
+  var textCols = columns.filter(function(c){return c.type==="text";});
+  var colNames = textCols.map(function(c){return c.name;}).join(", ");
+
+  var analyzeWithAI = async function() {
+    if (!text.trim()) return;
+    setLoading(true); setError(""); setPreview(null);
+    try {
+      var prompt = "Masz tekst z listą funkcjonalności/zadań do zaimportowania do trackera. Kolumny w tabeli: "+colNames+".\n\nZParsuj poniższy tekst i zwróć JSON array obiektów gdzie klucze to nazwy kolumn. Każdy obiekt = jeden wiersz. Pierwsze pole to nazwa/tytuł, drugie pole to opis jeśli istnieje.\n\nOdpowiedz TYLKO czystym JSON bez żadnego markdown ani backticks.\n\nTEKST DO PARSOWANIA:\n"+text;
+      var response = await fetch(ANTHROPIC_API, {
+        method:"POST",
+        headers:{"Content-Type":"application/json","anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+        body: JSON.stringify({
+          model:"claude-sonnet-4-20250514",
+          max_tokens:1000,
+          messages:[{role:"user",content:prompt}]
+        })
       });
-      setMapping(m);
-    } else {
-      var genHeaders = [];
-      for(var i=0;i<colCount;i++) genHeaders.push("Kolumna "+(i+1));
-      setHeaders(genHeaders);
-      setPreview(parsed);
-      setMapping({});
+      var data = await response.json();
+      var rawText = data.content && data.content[0] && data.content[0].text ? data.content[0].text : "";
+      var clean = rawText.replace(/```json/g,"").replace(/```/g,"").trim();
+      var parsed = JSON.parse(clean);
+      if (Array.isArray(parsed)) setPreview(parsed);
+      else setError("AI nie zwróciło poprawnego formatu — spróbuj jeszcze raz.");
+    } catch(e) {
+      setError("Błąd AI: "+e.message+". Spróbuj trybu Ręcznego.");
     }
-    setStep(2);
+    setLoading(false);
+  };
+
+  var parseManual = function() {
+    var lines = text.trim().split("\n").filter(function(l){return l.trim();});
+    var rows = lines.map(function(line) {
+      var clean = line.replace(/^[\s\-\*\•\d\.\)\|]+/,"").trim();
+      var parts = clean.split(/\s*[\|\t\-–—]\s*/);
+      var obj = {};
+      textCols.forEach(function(col,i) { obj[col.name] = parts[i] ? parts[i].trim() : ""; });
+      return obj;
+    }).filter(function(r) {
+      return Object.values(r).some(function(v){return v && v.trim();});
+    });
+    setPreview(rows);
   };
 
   var handleFile = function(file) {
     var reader = new FileReader();
     reader.onload = function(e) {
-      var content = e.target.result;
-      setText(content);
-      var hasTabs = content.includes("\t");
-      var hasSemicolon = content.includes(";");
-      var detectedSep = hasTabs?"tab":hasSemicolon?"semicolon":"comma";
-      setSeparator(detectedSep);
-      parseText(content, detectedSep);
+      setText(e.target.result);
     };
     reader.readAsText(file);
   };
 
   var doImport = function() {
-    var newRows = preview.map(function(row) {
-      var newRow = {id:mkId()};
+    if (!preview || !preview.length) return;
+    var newRows = preview.map(function(obj) {
+      var row = {id:mkId()};
       columns.forEach(function(col) {
-        if(col.type==="checkbox") newRow[col.id]=false;
-        else if(col.type==="test") newRow[col.id]=emptyTest();
-        else if(col.type==="url") newRow[col.id]={label:"",url:""};
-        else if(col.type==="status") newRow[col.id]=(col.options&&col.options[1]&&col.options[1].label)||"Nie rozpoczęte";
-        else newRow[col.id]="";
+        if(col.type==="checkbox") row[col.id]=false;
+        else if(col.type==="test") row[col.id]=emptyTest();
+        else if(col.type==="url") row[col.id]={label:"",url:""};
+        else if(col.type==="status") row[col.id]=(col.options&&col.options[1]&&col.options[1].label)||"Nie rozpoczęte";
+        else row[col.id]="";
       });
-      Object.keys(mapping).forEach(function(colIdx) {
-        var targetColId = mapping[colIdx];
-        var cellVal = row[parseInt(colIdx)] || "";
-        var targetCol = columns.find(function(c){return c.id===targetColId;});
-        if(targetCol) newRow[targetColId] = cellVal;
+      textCols.forEach(function(col) {
+        var val = obj[col.name] || obj[col.name.toLowerCase()] || "";
+        if (val) row[col.id] = val;
       });
-      return newRow;
+      if (!row[textCols[0] && textCols[0].id]) {
+        var keys = Object.keys(obj);
+        if (keys.length > 0 && textCols[0]) row[textCols[0].id] = obj[keys[0]] || "";
+        if (keys.length > 1 && textCols[1]) row[textCols[1].id] = obj[keys[1]] || "";
+      }
+      return row;
     });
     onImport(newRows);
   };
 
-  var textCols = columns.filter(function(c){return c.type==="text";});
-
   return ReactDOM.createPortal(
-    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.7)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)"}}
+    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.75)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(5px)"}}
       onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
-      <div style={{background:"#fff",borderRadius:24,width:680,maxWidth:"calc(100vw - 32px)",maxHeight:"85vh",overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:"0 30px 80px rgba(0,0,0,.3)",animation:"popIn .2s"}}>
-        <div style={{padding:"20px 28px 16px",background:"linear-gradient(135deg,#0F172A,#1E293B)",color:"#fff",flexShrink:0}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <div style={{background:"#fff",borderRadius:24,width:680,maxWidth:"calc(100vw - 32px)",maxHeight:"88vh",overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:"0 30px 80px rgba(0,0,0,.35)",animation:"popIn .2s"}}>
+
+        {/* Header */}
+        <div style={{padding:"22px 28px 0",background:"linear-gradient(135deg,#0F172A,#1E293B)",flexShrink:0}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
             <div>
-              <div style={{fontSize:11,color:"#64748B",fontWeight:700,textTransform:"uppercase",letterSpacing:".07em",marginBottom:4}}>Krok {step} z 2</div>
-              <h3 style={{fontSize:18,fontWeight:800,color:"#fff",margin:0}}>{step===1?"📋 Wklej lub wgraj dane":"🎯 Dopasuj kolumny"}</h3>
+              <h3 style={{fontSize:20,fontWeight:900,color:"#fff",margin:0}}>📋 Import danych</h3>
+              <div style={{color:"#64748B",fontSize:12,marginTop:4}}>Wklej tekst z ChatGPT, Notepada, Excela lub wgraj plik</div>
             </div>
             <button onClick={onClose} style={{border:"none",background:"rgba(255,255,255,.1)",color:"#fff",width:32,height:32,borderRadius:8,cursor:"pointer",fontSize:16}}>✕</button>
           </div>
-          <div style={{display:"flex",gap:0,marginTop:12}}>
-            {[1,2].map(function(s){
+          <div style={{display:"flex",gap:2,paddingBottom:0}}>
+            {[{id:"ai",icon:"✨",label:"Smart AI Paste"},{id:"manual",icon:"📊",label:"Ręczny / Excel / Plik"}].map(function(tab){
+              var isA = mode===tab.id;
               return (
-                <div key={s} style={{flex:1,height:3,background:step>=s?"#60A5FA":"#334155",borderRadius:99,marginRight:s<2?4:0,transition:"background .3s"}}/>
+                <div key={tab.id} onClick={function(){setMode(tab.id);setPreview(null);setError("");}}
+                  style={{padding:"10px 18px",cursor:"pointer",fontSize:13,fontWeight:700,
+                    color:isA?"#fff":"#64748B",
+                    background:isA?"rgba(255,255,255,.08)":"transparent",
+                    borderRadius:"10px 10px 0 0",
+                    borderBottom:isA?"3px solid #60A5FA":"3px solid transparent",
+                    display:"flex",alignItems:"center",gap:7,transition:"all .15s"}}>
+                  <span>{tab.icon}</span><span>{tab.label}</span>
+                </div>
               );
             })}
           </div>
         </div>
 
-        <div style={{flex:1,overflowY:"auto",padding:"20px 28px"}}>
-          {step===1 && (
-            <div>
-              <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
-                <div style={{fontSize:12,fontWeight:700,color:"#64748B",alignSelf:"center"}}>Separator:</div>
-                {[{v:"tab",l:"Tab (Excel/Sheets)"},{v:"semicolon",l:"Średnik (;)"},{v:"comma",l:"Przecinek (,)"},{v:"pipe",l:"Pipe (|)"}].map(function(s){
-                  return (
-                    <button key={s.v} onClick={function(){setSeparator(s.v);}} style={{
-                      border:"1.5px solid "+(separator===s.v?"#3B82F6":"#E2E8F0"),
-                      background:separator===s.v?"#EFF6FF":"transparent",color:separator===s.v?"#1D4ED8":"#64748B",
-                      padding:"5px 12px",borderRadius:20,cursor:"pointer",fontSize:12,fontFamily:"inherit",fontWeight:600
-                    }}>{s.l}</button>
-                  );
-                })}
-              </div>
+        <div style={{flex:1,overflowY:"auto",padding:"24px 28px"}}>
 
+          {/* ✨ AI MODE */}
+          {mode==="ai" && (
+            <div>
+              <div style={{padding:"12px 16px",background:"linear-gradient(135deg,#EFF6FF,#F0FDF4)",borderRadius:12,border:"1px solid #BFDBFE",marginBottom:16,fontSize:13,color:"#1E3A8A",display:"flex",gap:10,alignItems:"flex-start"}}>
+                <span style={{fontSize:20,flexShrink:0}}>✨</span>
+                <div>
+                  <strong>Jak to działa:</strong> Wklej dowolny tekst — listę punktowaną, tabelę, wynik ChatGPT, notatki. AI automatycznie rozpozna strukturę i dopasuje do kolumn: <strong>{colNames}</strong>.
+                </div>
+              </div>
+              <label style={{display:"block",fontSize:11,fontWeight:800,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Wklej tekst tutaj (Ctrl+V)</label>
+              <textarea value={text} onChange={function(e){setText(e.target.value);setPreview(null);}}
+                placeholder={"Przykłady co możesz wkleić:\n\n• Logowanie - Sprawdzenie logowania i komunikatów błędu\n• Rejestracja - Walidacja pól formularza\n\nLub tabela z ChatGPT:\nFunkcjonalność | Opis\nLogowanie | Sprawdzenie...\n\nLub zwykła lista:\n1. Logowanie\n2. Rejestracja\n3. Koszyk"}
+                rows={9}
+                style={{width:"100%",border:"1.5px solid #E2E8F0",borderRadius:12,padding:"14px",fontSize:13,fontFamily:"inherit",resize:"vertical",lineHeight:1.7,background:"#FAFBFF",color:"#1E293B"}}
+                onFocus={function(e){e.currentTarget.style.borderColor="#60A5FA";}}
+                onBlur={function(e){e.currentTarget.style.borderColor="#E2E8F0";}}/>
+              {error && <div style={{padding:"10px 14px",background:"#FEE2E2",borderRadius:10,color:"#991B1B",fontSize:12,marginTop:10,border:"1px solid #FCA5A5"}}>{error}</div>}
+              {preview && (
+                <div style={{marginTop:16}}>
+                  <div style={{padding:"8px 12px",background:"#D1FAE5",borderRadius:8,color:"#065F46",fontSize:12,fontWeight:700,marginBottom:10,border:"1px solid #6EE7B7"}}>
+                    ✅ AI znalazł {preview.length} wierszy — sprawdź podgląd poniżej
+                  </div>
+                  <div style={{borderRadius:10,overflow:"hidden",border:"1px solid #E2E8F0",fontSize:12,maxHeight:200,overflowY:"auto"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse"}}>
+                      <thead>
+                        <tr style={{background:"#F8FAFC"}}>
+                          {preview[0] && Object.keys(preview[0]).map(function(k){return <th key={k} style={{padding:"7px 10px",textAlign:"left",fontWeight:700,color:"#64748B",fontSize:11,borderBottom:"1px solid #E2E8F0"}}>{k}</th>;})}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {preview.slice(0,5).map(function(row,ri){
+                          return (
+                            <tr key={ri} style={{borderBottom:"1px solid #F1F5F9"}}>
+                              {Object.values(row).map(function(cell,ci){return <td key={ci} style={{padding:"7px 10px",color:"#334155"}}>{String(cell||"")}</td>;})}
+                            </tr>
+                          );
+                        })}
+                        {preview.length>5 && <tr><td colSpan={99} style={{padding:"7px 10px",color:"#94A3B8",fontStyle:"italic",textAlign:"center"}}>...i jeszcze {preview.length-5} wierszy</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 📊 MANUAL MODE */}
+          {mode==="manual" && (
+            <div>
               <div style={{border:"2px dashed #E2E8F0",borderRadius:16,padding:"20px",marginBottom:16,
                 background:"#FAFBFF",cursor:"pointer",textAlign:"center",transition:"all .15s"}}
                 onClick={function(){if(fileRef.current)fileRef.current.click();}}
@@ -609,100 +665,70 @@ function ImportModal({columns, onImport, onClose}) {
                   if(file) handleFile(file);
                 }}>
                 <div style={{fontSize:32,marginBottom:8}}>📂</div>
-                <div style={{fontSize:14,fontWeight:700,color:"#1E293B",marginBottom:4}}>Przeciągnij plik CSV / Excel (TSV)</div>
-                <div style={{fontSize:12,color:"#94A3B8"}}>lub kliknij aby wybrać plik</div>
-                <input ref={fileRef} type="file" accept=".csv,.tsv,.txt,.xlsx" style={{display:"none"}}
+                <div style={{fontSize:14,fontWeight:700,color:"#1E293B",marginBottom:4}}>Przeciągnij plik CSV / TSV</div>
+                <div style={{fontSize:12,color:"#94A3B8"}}>lub kliknij aby wybrać</div>
+                <input ref={fileRef} type="file" accept=".csv,.tsv,.txt" style={{display:"none"}}
                   onChange={function(e){if(e.target.files[0])handleFile(e.target.files[0]);}}/>
               </div>
-
-              <div style={{position:"relative",marginBottom:16}}>
-                <div style={{position:"absolute",top:0,left:0,right:0,display:"flex",alignItems:"center",gap:10,padding:"0 16px"}}>
-                  <div style={{flex:1,height:1,background:"#E2E8F0"}}/>
-                  <span style={{fontSize:11,color:"#94A3B8",fontWeight:700,textTransform:"uppercase"}}>lub wklej ręcznie</span>
-                  <div style={{flex:1,height:1,background:"#E2E8F0"}}/>
+              <div style={{position:"relative",marginBottom:16,textAlign:"center"}}>
+                <div style={{height:1,background:"#E2E8F0",position:"absolute",top:"50%",left:0,right:0}}/>
+                <span style={{position:"relative",background:"#fff",padding:"0 12px",fontSize:11,color:"#94A3B8",fontWeight:700,textTransform:"uppercase"}}>lub wklej ręcznie</span>
+              </div>
+              <div style={{padding:"10px 14px",background:"#FEF9C3",borderRadius:10,border:"1px solid #FDE047",marginBottom:12,fontSize:12,color:"#854D0E"}}>
+                💡 Możesz wkleić komórki z <strong>Excel / Google Sheets</strong> (Ctrl+C w tabeli → Ctrl+V tutaj). Separatory Tab i Średnik są obsługiwane.
+              </div>
+              <textarea value={text} onChange={function(e){setText(e.target.value);setPreview(null);}}
+                placeholder={"Wklej z Excela / Google Sheets:\nFunkcjonalność\tOpis\nLogowanie\tSprawdzenie logowania\n\nLub lista:\nLogowanie\tSprawdzenie\nRejestracja\tWalidacja"}
+                rows={8} style={{width:"100%",border:"1.5px solid #E2E8F0",borderRadius:12,padding:"12px 14px",
+                  fontSize:12,fontFamily:"'Courier New',monospace",resize:"vertical",lineHeight:1.6,background:"#FAFBFF"}}
+                onFocus={function(e){e.currentTarget.style.borderColor="#3B82F6";}}
+                onBlur={function(e){e.currentTarget.style.borderColor="#E2E8F0";}}/>
+              {preview && (
+                <div style={{marginTop:12,padding:"8px 12px",background:"#D1FAE5",borderRadius:8,color:"#065F46",fontSize:12,fontWeight:700,border:"1px solid #6EE7B7"}}>
+                  ✅ Znaleziono {preview.length} wierszy — gotowe do importu
                 </div>
-              </div>
-              <div style={{marginTop:16}}>
-                <label style={{fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em",display:"block",marginBottom:8}}>Wklej dane (z Excela, Sheets, Notepada…)</label>
-                <textarea value={text} onChange={function(e){setText(e.target.value);}}
-                  placeholder={"Funkcjonalność\tOpis\nLogowanie\tSprawdzenie logowania\nRejestracja\tWalidacja pól\n\nLub wklej Ctrl+V skopiowane komórki z Excel / Google Sheets"}
-                  rows={8} style={{width:"100%",border:"1.5px solid #E2E8F0",borderRadius:12,padding:"12px 14px",
-                    fontSize:12,fontFamily:"'Courier New',monospace",resize:"vertical",lineHeight:1.6,background:"#FAFBFF"}}
-                  onFocus={function(e){e.currentTarget.style.borderColor="#3B82F6";}}
-                  onBlur={function(e){e.currentTarget.style.borderColor="#E2E8F0";}}/>
-              </div>
-            </div>
-          )}
-
-          {step===2 && (
-            <div>
-              <div style={{padding:"10px 14px",background:"#EFF6FF",borderRadius:10,border:"1px solid #BFDBFE",marginBottom:16,fontSize:13,color:"#1E3A8A"}}>
-                Znaleziono <strong>{preview.length} wierszy</strong>. Dopasuj kolumny z importu do kolumn tabeli.
-              </div>
-              <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
-                {headers.map(function(h,i){
-                  return (
-                    <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:"#F8FAFC",borderRadius:10,border:"1px solid #E2E8F0"}}>
-                      <div style={{width:140,flexShrink:0}}>
-                        <div style={{fontSize:11,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".05em",marginBottom:2}}>Kolumna importu</div>
-                        <div style={{fontSize:13,fontWeight:700,color:"#1E293B"}}>{h}</div>
-                        <div style={{fontSize:11,color:"#94A3B8",marginTop:2}}>{preview[0] && preview[0][i] ? '"'+preview[0][i].slice(0,25)+'"' : "—"}</div>
-                      </div>
-                      <div style={{fontSize:18,color:"#CBD5E1"}}>→</div>
-                      <select value={mapping[i]||""} onChange={function(e){
-                        var val = e.target.value;
-                        var idx = i;
-                        setMapping(function(m){var nm=Object.assign({},m);if(val)nm[idx]=val;else delete nm[idx];return nm;});
-                      }} style={{flex:1,border:"1.5px solid #E2E8F0",borderRadius:8,padding:"8px 10px",fontSize:13,fontFamily:"inherit",background:"#fff",cursor:"pointer"}}
-                        onFocus={function(e){e.currentTarget.style.borderColor="#3B82F6";}} onBlur={function(e){e.currentTarget.style.borderColor="#E2E8F0";}}>
-                        <option value="">— Pomiń tę kolumnę —</option>
-                        {textCols.map(function(col){return <option key={col.id} value={col.id}>{col.name}</option>;})}
-                      </select>
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{fontSize:11,color:"#94A3B8",marginBottom:8}}>Podgląd (pierwsze 3 wiersze):</div>
-              <div style={{borderRadius:10,overflow:"hidden",border:"1px solid #E2E8F0",fontSize:12}}>
-                <table style={{width:"100%",borderCollapse:"collapse"}}>
-                  <thead>
-                    <tr style={{background:"#F8FAFC"}}>
-                      {headers.map(function(h,i){return <th key={i} style={{padding:"7px 10px",textAlign:"left",fontWeight:700,color:"#64748B",fontSize:11,borderBottom:"1px solid #E2E8F0"}}>{h}{mapping[i]?" → "+columns.find(function(c){return c.id===mapping[i];})&&columns.find(function(c){return c.id===mapping[i];}).name:""}</th>;})}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {preview.slice(0,3).map(function(row,ri){
-                      return (
-                        <tr key={ri} style={{borderBottom:"1px solid #F1F5F9"}}>
-                          {row.map(function(cell,ci){return <td key={ci} style={{padding:"7px 10px",color:"#334155"}}>{cell}</td>;})}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              )}
             </div>
           )}
         </div>
 
-        <div style={{padding:"16px 28px",borderTop:"1px solid #F1F5F9",display:"flex",gap:10,justifyContent:"space-between",flexShrink:0}}>
-          <button onClick={step===1?onClose:function(){setStep(1);}} style={{border:"1.5px solid #E2E8F0",background:"transparent",color:"#64748B",padding:"10px 20px",borderRadius:10,cursor:"pointer",fontFamily:"inherit",fontWeight:600,fontSize:14}}>
-            {step===1?"Anuluj":"← Wstecz"}
-          </button>
-          <button onClick={step===1?function(){if(text.trim())parseText(text,separator);}:doImport}
-            disabled={step===1?!text.trim():Object.keys(mapping).length===0}
-            style={{border:"none",background:"linear-gradient(135deg,#1E293B,#0F172A)",color:"#fff",padding:"10px 28px",borderRadius:10,cursor:"pointer",fontFamily:"inherit",fontWeight:700,fontSize:14,opacity:(step===1?!text.trim():Object.keys(mapping).length===0)?0.4:1}}>
-            {step===1?"Dalej →":"✅ Importuj "+preview.length+" wierszy"}
-          </button>
+        {/* Footer */}
+        <div style={{padding:"16px 28px",borderTop:"1px solid #F1F5F9",display:"flex",gap:10,justifyContent:"space-between",flexShrink:0,background:"#FAFBFF"}}>
+          <button onClick={onClose} style={{border:"1.5px solid #E2E8F0",background:"transparent",color:"#64748B",padding:"10px 20px",borderRadius:10,cursor:"pointer",fontFamily:"inherit",fontWeight:600,fontSize:14}}>Anuluj</button>
+          <div style={{display:"flex",gap:10}}>
+            {mode==="ai" && !preview && (
+              <button onClick={analyzeWithAI} disabled={!text.trim()||loading}
+                style={{border:"none",background:loading?"#94A3B8":"linear-gradient(135deg,#6366F1,#4F46E5)",color:"#fff",padding:"10px 24px",borderRadius:10,cursor:loading?"not-allowed":"pointer",fontFamily:"inherit",fontWeight:700,fontSize:14,display:"flex",alignItems:"center",gap:8,opacity:!text.trim()?0.5:1}}>
+                {loading
+                  ? <span style={{animation:"spin 1s linear infinite",display:"inline-block"}}>⚙️</span>
+                  : <span>✨</span>
+                }
+                {loading ? "AI analizuje…" : "Analizuj z AI"}
+              </button>
+            )}
+            {mode==="manual" && !preview && (
+              <button onClick={parseManual} disabled={!text.trim()}
+                style={{border:"none",background:"linear-gradient(135deg,#1E293B,#0F172A)",color:"#fff",padding:"10px 24px",borderRadius:10,cursor:"pointer",fontFamily:"inherit",fontWeight:700,fontSize:14,opacity:!text.trim()?0.5:1}}>
+                Parsuj →
+              </button>
+            )}
+            {preview && (
+              <button onClick={doImport}
+                style={{border:"none",background:"linear-gradient(135deg,#10B981,#059669)",color:"#fff",padding:"10px 28px",borderRadius:10,cursor:"pointer",fontFamily:"inherit",fontWeight:700,fontSize:14,boxShadow:"0 4px 12px #10B98144"}}>
+                ✅ Importuj {preview.length} wierszy
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>, document.body
   );
 }
 
-// ── ROW DETAIL PANEL ─────────────────────────────────────────────────────────
-function RowDetailPanel({row, columns, onClose, onUpdate}) {
-  var [draft, setDraft] = useState(Object.assign({},row));
+// ── ROW DETAIL PANEL ──────────────────────────────────────────────────────────
+function RowDetailPanel(props) {
+  var row = props.row; var columns = props.columns; var onClose = props.onClose; var onUpdate = props.onUpdate;
+  var pair = useState(Object.assign({},row)); var draft = pair[0]; var setDraft = pair[1];
   var save = function(){onUpdate(draft);onClose();};
   var updateField = function(colId,val){setDraft(function(d){return Object.assign({},d,{[colId]:val});});};
   return ReactDOM.createPortal(
@@ -714,7 +740,7 @@ function RowDetailPanel({row, columns, onClose, onUpdate}) {
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div>
               <div style={{fontSize:11,color:"#64748B",fontWeight:700,textTransform:"uppercase",letterSpacing:".07em",marginBottom:4}}>Szczegóły wiersza</div>
-              <div style={{fontSize:16,fontWeight:800,color:"#fff"}}>{(columns[0] && draft[columns[0].id])||"Nowy wiersz"}</div>
+              <div style={{fontSize:16,fontWeight:800,color:"#fff"}}>{(columns[0] && draft[columns[0].id])||"Wiersz"}</div>
             </div>
             <button onClick={onClose} style={{border:"none",background:"rgba(255,255,255,.1)",color:"#fff",width:32,height:32,borderRadius:8,cursor:"pointer",fontSize:16}}>✕</button>
           </div>
@@ -781,20 +807,25 @@ function RowDetailPanel({row, columns, onClose, onUpdate}) {
   );
 }
 
-// ── COLUMN MODAL ─────────────────────────────────────────────────────────────
-function ColumnModal({col, onSave, onClose}) {
+// ── COLUMN MODAL ──────────────────────────────────────────────────────────────
+function ColumnModal(props) {
+  var col = props.col; var onSave = props.onSave; var onClose = props.onClose;
   var isNew = !col.id;
-  var [name, setName] = useState(col.name||"");
-  var [type, setType] = useState(col.type||"text");
-  var [isComment, setIsComment] = useState(!!col.comment);
-  var [statusOpts, setStatusOpts] = useState(col.type==="status"?(col.options||[]):[{label:"Opcja 1",bg:"#D1FAE5",color:"#065F46",dot:"#10B981",border:"#6EE7B7"},{label:"Opcja 2",bg:"#FEE2E2",color:"#991B1B",dot:"#EF4444",border:"#FCA5A5"}]);
+  var p1 = useState(col.name||""); var name = p1[0]; var setName = p1[1];
+  var p2 = useState(col.type||"text"); var type = p2[0]; var setType = p2[1];
+  var p3 = useState(!!col.comment); var isComment = p3[0]; var setIsComment = p3[1];
+  var p4 = useState(col.type==="status"?(col.options||[]):[
+    Object.assign({label:"Opcja 1"},PALETTE[0]),
+    Object.assign({label:"Opcja 2"},PALETTE[1])
+  ]); var statusOpts = p4[0]; var setStatusOpts = p4[1];
+
   var addOpt = function(){setStatusOpts(function(o){return [...o,Object.assign({label:"Nowa opcja"},PALETTE[o.length%PALETTE.length])];});};
   var removeOpt = function(i){setStatusOpts(function(o){return o.filter(function(_,idx){return idx!==i;});});};
   var save = function() {
     if (!name.trim()) return;
     var base = {id:col.id||mkId(),name:name.trim(),type:type};
     if (type==="status") {onSave(Object.assign({},base,{options:statusOpts.filter(function(o){return o.label.trim();})}));return;}
-    if (type==="text") {onSave(Object.assign({},base,isComment?{comment:true}:{}));return;}
+    if (type==="text" && isComment) {onSave(Object.assign({},base,{comment:true}));return;}
     onSave(base);
   };
   var TYPES = [
@@ -813,7 +844,7 @@ function ColumnModal({col, onSave, onClose}) {
         <div style={{marginBottom:18}}>
           <label style={{display:"block",fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Nazwa kolumny</label>
           <input value={name} onChange={function(e){setName(e.target.value);}} placeholder="np. Priorytet, Assignee…"
-            style={{width:"100%",border:"1.5px solid #E2E8F0",borderRadius:10,padding:"10px 14px",fontSize:14,fontFamily:"inherit",color:"#1E293B"}}
+            style={{width:"100%",border:"1.5px solid #E2E8F0",borderRadius:10,padding:"10px 14px",fontSize:14,fontFamily:"inherit"}}
             onFocus={function(e){e.currentTarget.style.borderColor="#3B82F6";}} onBlur={function(e){e.currentTarget.style.borderColor="#E2E8F0";}}/>
         </div>
         <div style={{marginBottom:20}}>
@@ -867,16 +898,21 @@ function ColumnModal({col, onSave, onClose}) {
 }
 
 // ── SHEET VIEW ────────────────────────────────────────────────────────────────
-function SheetView({sheet, onChange}) {
-  var [colModal, setColModal] = useState(null);
-  var [editingHeader, setEditingHeader] = useState(null);
-  var [hoveredRow, setHoveredRow] = useState(null);
-  var [detailRow, setDetailRow] = useState(null);
-  var [search, setSearch] = useState("");
-  var [importModal, setImportModal] = useState(false);
+function SheetView(props) {
+  var sheet = props.sheet; var onChange = props.onChange;
+  var p1 = useState(null); var colModal = p1[0]; var setColModal = p1[1];
+  var p2 = useState(null); var editingHeader = p2[0]; var setEditingHeader = p2[1];
+  var p3 = useState(null); var hoveredRow = p3[0]; var setHoveredRow = p3[1];
+  var p4 = useState(null); var detailRow = p4[0]; var setDetailRow = p4[1];
+  var p5 = useState(""); var search = p5[0]; var setSearch = p5[1];
+  var p6 = useState(false); var importModal = p6[0]; var setImportModal = p6[1];
 
-  var updateRow = function(rowId,colId,val){onChange(Object.assign({},sheet,{rows:sheet.rows.map(function(r){return r.id===rowId?Object.assign({},r,{[colId]:val}):r;})}));};
-  var updateFullRow = function(newRow){onChange(Object.assign({},sheet,{rows:sheet.rows.map(function(r){return r.id===newRow.id?newRow:r;})}));};
+  var updateRow = function(rowId,colId,val){
+    onChange(Object.assign({},sheet,{rows:sheet.rows.map(function(r){return r.id===rowId?Object.assign({},r,{[colId]:val}):r;})}));
+  };
+  var updateFullRow = function(newRow){
+    onChange(Object.assign({},sheet,{rows:sheet.rows.map(function(r){return r.id===newRow.id?newRow:r;})}));
+  };
   var addRow = function() {
     var row = {id:mkId()};
     sheet.columns.forEach(function(c) {
@@ -907,7 +943,7 @@ function SheetView({sheet, onChange}) {
     var headers = sheet.columns.map(function(c){return c.name;}).join("\t");
     var rows = sheet.rows.map(function(r){
       return sheet.columns.map(function(c){
-        var v = r[c.id];
+        var v=r[c.id];
         if(c.type==="test") return (v&&v.state)||"";
         if(c.type==="checkbox") return v?"TAK":"NIE";
         if(c.type==="url") return (v&&v.url)||"";
@@ -945,8 +981,9 @@ function SheetView({sheet, onChange}) {
     <div>
       {colModal && <ColumnModal col={colModal.col} onSave={saveCol} onClose={function(){setColModal(null);}}/>}
       {detailRow && <RowDetailPanel row={detailRow} columns={sheet.columns} onClose={function(){setDetailRow(null);}} onUpdate={updateFullRow}/>}
-      {importModal && <ImportModal columns={sheet.columns} onImport={importRows} onClose={function(){setImportModal(false);}}/>}
+      {importModal && <SmartPasteModal columns={sheet.columns} onImport={importRows} onClose={function(){setImportModal(false);}}/>}
 
+      {/* Stats bar */}
       <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap",alignItems:"stretch"}}>
         <div style={{padding:"12px 20px",borderRadius:14,background:"linear-gradient(135deg,#1E293B,#334155)",minWidth:90}}>
           <div style={{fontSize:22,fontWeight:900,color:"#fff",letterSpacing:"-1px"}}>{total}</div>
@@ -963,7 +1000,7 @@ function SheetView({sheet, onChange}) {
         )}
         {ts && (
           <div style={{padding:"12px 18px",borderRadius:14,background:"#fff",border:"1px solid #E2E8F0",display:"flex",flexDirection:"column",gap:8,minWidth:230}}>
-            <div style={{fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em"}}>🧪 Wyniki testów</div>
+            <div style={{fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em"}}>🧪 Testy</div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
               {[{key:"pass",label:"Przeszły",color:"#065F46",bg:"#D1FAE5",dot:"#10B981"},{key:"fail",label:"Błąd",color:"#991B1B",bg:"#FEE2E2",dot:"#EF4444"},{key:"running",label:"W trakcie",color:"#854D0E",bg:"#FEF9C3",dot:"#EAB308"},{key:"untested",label:"Brak",color:"#475569",bg:"#F1F5F9",dot:"#94A3B8"}].filter(function(s){return ts[s.key]>0;}).map(function(s){
                 return (
@@ -984,7 +1021,7 @@ function SheetView({sheet, onChange}) {
           </div>
         )}
         {checkCols.map(function(c){
-          var pct = total?Math.round(sheet.rows.filter(function(r){return r[c.id];}).length/total*100):0;
+          var pct=total?Math.round(sheet.rows.filter(function(r){return r[c.id];}).length/total*100):0;
           return (
             <div key={c.id} style={{padding:"12px 20px",borderRadius:14,background:"linear-gradient(135deg,#6B21A8,#7C3AED)"}}>
               <div style={{fontSize:22,fontWeight:900,color:"#fff",letterSpacing:"-1px"}}>{pct}%</div>
@@ -999,13 +1036,13 @@ function SheetView({sheet, onChange}) {
               style={{padding:"8px 12px 8px 32px",border:"1.5px solid #E2E8F0",borderRadius:10,fontSize:13,fontFamily:"inherit",background:"#fff",color:"#1E293B",width:180}}
               onFocus={function(e){e.currentTarget.style.borderColor="#3B82F6";}} onBlur={function(e){e.currentTarget.style.borderColor="#E2E8F0";}}/>
           </div>
-          <button onClick={function(){setImportModal(true);}} title="Importuj z Excel / Google Sheets / wklej"
+          <button onClick={function(){setImportModal(true);}}
             style={{border:"1.5px solid #E2E8F0",background:"#fff",color:"#475569",padding:"8px 14px",borderRadius:10,cursor:"pointer",fontSize:13,fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:5,transition:"all .15s"}}
-            onMouseEnter={function(e){e.currentTarget.style.borderColor="#3B82F6";e.currentTarget.style.color="#1D4ED8";e.currentTarget.style.background="#EFF6FF";}}
+            onMouseEnter={function(e){e.currentTarget.style.borderColor="#6366F1";e.currentTarget.style.color="#4F46E5";e.currentTarget.style.background="#EEF2FF";}}
             onMouseLeave={function(e){e.currentTarget.style.borderColor="#E2E8F0";e.currentTarget.style.color="#475569";e.currentTarget.style.background="#fff";}}>
-            📋 Import
+            ✨ Import
           </button>
-          <button onClick={exportToClipboard} title="Kopiuj do schowka — wklej w Google Sheets lub Excel"
+          <button onClick={exportToClipboard}
             style={{border:"1.5px solid #E2E8F0",background:"#fff",color:"#475569",padding:"8px 14px",borderRadius:10,cursor:"pointer",fontSize:13,fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:5,transition:"all .15s"}}
             onMouseEnter={function(e){e.currentTarget.style.borderColor="#10B981";e.currentTarget.style.color="#065F46";e.currentTarget.style.background="#F0FDF4";}}
             onMouseLeave={function(e){e.currentTarget.style.borderColor="#E2E8F0";e.currentTarget.style.color="#475569";e.currentTarget.style.background="#fff";}}>
@@ -1014,6 +1051,7 @@ function SheetView({sheet, onChange}) {
         </div>
       </div>
 
+      {/* Table */}
       <div style={{borderRadius:16,overflow:"hidden",boxShadow:"0 8px 32px rgba(0,0,0,.1)",border:"1px solid #E2E8F0"}}>
         <div style={{overflowX:"auto"}}>
           <table style={{width:"100%",borderCollapse:"collapse",background:"#fff"}}>
@@ -1107,19 +1145,65 @@ function SheetView({sheet, onChange}) {
   );
 }
 
+// ── PROJECT MODAL ─────────────────────────────────────────────────────────────
+function ProjectModal(props) {
+  var initial = props.initial; var onSave = props.onSave; var onClose = props.onClose;
+  var isEdit = !!(initial && initial.id);
+  var p1 = useState(initial&&initial.name?initial.name:""); var name = p1[0]; var setName = p1[1];
+  var p2 = useState((initial&&initial.emoji)||"🚀"); var emoji = p2[0]; var setEmoji = p2[1];
+  var p3 = useState((initial&&initial.color)||"#3B82F6"); var color = p3[0]; var setColor = p3[1];
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.7)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)"}}
+      onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
+      <div style={{background:"#fff",borderRadius:20,padding:32,width:420,maxWidth:"calc(100vw - 32px)",boxShadow:"0 30px 80px rgba(0,0,0,.3)",animation:"popIn .2s"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
+          <h3 style={{fontSize:20,fontWeight:800,color:"#0F172A"}}>{isEdit?"✏️ Edytuj projekt":"🆕 Nowy projekt"}</h3>
+          <button onClick={onClose} style={{border:"none",background:"#F1F5F9",fontSize:16,cursor:"pointer",color:"#64748B",width:32,height:32,borderRadius:8}}>✕</button>
+        </div>
+        <div style={{marginBottom:16}}>
+          <label style={{display:"block",fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Nazwa projektu</label>
+          <input value={name} onChange={function(e){setName(e.target.value);}} placeholder="np. E-commerce, HC PROD, CRM…"
+            style={{width:"100%",border:"1.5px solid #E2E8F0",borderRadius:10,padding:"10px 14px",fontSize:14,fontFamily:"inherit"}}
+            onFocus={function(e){e.currentTarget.style.borderColor="#3B82F6";}} onBlur={function(e){e.currentTarget.style.borderColor="#E2E8F0";}}/>
+        </div>
+        <div style={{marginBottom:16}}>
+          <label style={{display:"block",fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Emoji projektu</label>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {PROJECT_EMOJIS.map(function(e){
+              return <div key={e} onClick={function(){setEmoji(e);}} style={{width:36,height:36,borderRadius:8,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,border:"2px solid "+(emoji===e?"#3B82F6":"#E2E8F0"),background:emoji===e?"#EFF6FF":"#F8FAFC"}}>{e}</div>;
+            })}
+          </div>
+        </div>
+        <div style={{marginBottom:24}}>
+          <label style={{display:"block",fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Kolor akcentu</label>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {PROJECT_COLORS.map(function(c){
+              return <div key={c} onClick={function(){setColor(c);}} style={{width:28,height:28,borderRadius:"50%",background:c,cursor:"pointer",border:"3px solid "+(color===c?"#0F172A":"transparent"),transform:color===c?"scale(1.2)":"scale(1)",transition:"transform .15s"}}/>;
+            })}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+          <button onClick={onClose} style={{border:"1.5px solid #E2E8F0",background:"transparent",color:"#64748B",padding:"10px 22px",borderRadius:10,cursor:"pointer",fontSize:14,fontFamily:"inherit",fontWeight:600}}>Anuluj</button>
+          <button onClick={function(){if(name.trim())onSave(name.trim(),emoji,color);}} style={{border:"none",background:"linear-gradient(135deg,#1E293B,#0F172A)",color:"#fff",padding:"10px 22px",borderRadius:10,cursor:"pointer",fontSize:14,fontFamily:"inherit",fontWeight:700}}>{isEdit?"Zapisz":"Utwórz projekt"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── ROOT APP ──────────────────────────────────────────────────────────────────
 function App() {
-  var [projects, setProjects] = useState(defaultProjects);
-  var [activeProjId, setActiveProjId] = useState(defaultProjects[0].id);
-  var [activeSheetId, setActiveSheetId] = useState(defaultProjects[0].sheets[0].id);
-  var [loading, setLoading] = useState(true);
-  var [saving, setSaving] = useState(false);
-  var [lastSaved, setLastSaved] = useState(null);
-  var [sidebarOpen, setSidebarOpen] = useState(true);
-  var [editingTab, setEditingTab] = useState(null);
-  var [newSheetMode, setNewSheetMode] = useState(false);
-  var [newSheetName, setNewSheetName] = useState("");
-  var [projModal, setProjModal] = useState(null);
+  var p1 = useState(defaultProjects); var projects = p1[0]; var setProjects = p1[1];
+  var p2 = useState(defaultProjects[0].id); var activeProjId = p2[0]; var setActiveProjId = p2[1];
+  var p3 = useState(defaultProjects[0].sheets[0].id); var activeSheetId = p3[0]; var setActiveSheetId = p3[1];
+  var p4 = useState(true); var loading = p4[0]; var setLoading = p4[1];
+  var p5 = useState(false); var saving = p5[0]; var setSaving = p5[1];
+  var p6 = useState(null); var lastSaved = p6[0]; var setLastSaved = p6[1];
+  var p7 = useState(true); var sidebarOpen = p7[0]; var setSidebarOpen = p7[1];
+  var p8 = useState(null); var editingTab = p8[0]; var setEditingTab = p8[1];
+  var p9 = useState(false); var newSheetMode = p9[0]; var setNewSheetMode = p9[1];
+  var p10 = useState(""); var newSheetName = p10[0]; var setNewSheetName = p10[1];
+  var p11 = useState(null); var projModal = p11[0]; var setProjModal = p11[1];
   var saveDebounced = useRef(null);
 
   useEffect(function() {
@@ -1169,10 +1253,14 @@ function App() {
     setActiveSheetId(s.id); setNewSheetName(""); setNewSheetMode(false);
   };
   var addProject = function(name,emoji,color) {
-    var p = {id:mkId(),name:name,emoji:emoji,color:color,
-      sheets:[mkChecklistSheet([])]};
+    var p = {id:mkId(),name:name,emoji:emoji,color:color,sheets:[mkChecklistSheet([])]};
     setProjects(function(ps){return [...ps,p];});
     setActiveProjId(p.id); setActiveSheetId(p.sheets[0].id);
+    setProjModal(null);
+  };
+  var updateProject = function(id,name,emoji,color) {
+    setProjects(function(ps){return ps.map(function(p){return p.id===id?Object.assign({},p,{name:name,emoji:emoji,color:color}):p;});});
+    setProjModal(null);
   };
   var deleteProject = function(id) {
     if(projects.length<=1) return;
@@ -1181,57 +1269,58 @@ function App() {
     if(activeProjId===id){setActiveProjId(rest[0].id);setActiveSheetId(rest[0].sheets[0].id);}
   };
 
-  var releaseSheet = activeProj && activeProj.sheets.find(function(s){return s.id==="sheet_release_tasks";});
-  var releaseHealth = releaseSheet ? (function() {
-    var t = releaseSheet.rows.length; if(!t) return 0;
-    var be = releaseSheet.columns.find(function(c){return c.id==="col_be";});
-    var fe = releaseSheet.columns.find(function(c){return c.id==="col_fe";});
-    var tc = releaseSheet.columns.find(function(c){return c.id==="col_testy";});
-    var score = 0;
-    releaseSheet.rows.forEach(function(r){
-      var pts=0;
-      if(be&&r[be.id]==="Zakończone")pts++;
-      if(fe&&r[fe.id]==="Zakończone")pts++;
-      if(tc&&r[tc.id]&&r[tc.id].state==="pass")pts++;
-      score+=pts/3;
-    });
-    return Math.round(score/t*100);
-  })() : 0;
+  var releaseSheet = activeProj && activeProj.sheets.find(function(s){return s.columns && s.columns.find(function(c){return c.id==="col_be";});});
+  var releaseHealth = 0;
+  if(releaseSheet) {
+    var t = releaseSheet.rows.length;
+    if(t > 0) {
+      var beCol = releaseSheet.columns.find(function(c){return c.id==="col_be";});
+      var feCol = releaseSheet.columns.find(function(c){return c.id==="col_fe";});
+      var tcCol = releaseSheet.columns.find(function(c){return c.id==="col_testy";});
+      var score = 0;
+      releaseSheet.rows.forEach(function(r){
+        var pts=0;
+        if(beCol&&r[beCol.id]==="Zakończone")pts++;
+        if(feCol&&r[feCol.id]==="Zakończone")pts++;
+        if(tcCol&&r[tcCol.id]&&r[tcCol.id].state==="pass")pts++;
+        score+=pts/3;
+      });
+      releaseHealth = Math.round(score/t*100);
+    }
+  }
   var hColor = releaseHealth>70?"#34D399":releaseHealth>40?"#FCD34D":"#F87171";
 
   if(loading) return (
     <div style={{minHeight:"100vh",background:"#0F172A",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16,fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       <div style={{fontSize:48,animation:"spin 1.5s linear infinite"}}>⚙️</div>
-      <div style={{color:"#fff",fontWeight:700,fontSize:16}}>Wczytywanie z Google Sheets…</div>
-      <div style={{color:"#64748B",fontSize:13}}>Synchronizacja danych z chmurą</div>
+      <div style={{color:"#fff",fontWeight:700,fontSize:16}}>Wczytywanie…</div>
+      <div style={{color:"#64748B",fontSize:13}}>Synchronizacja z Google Sheets</div>
     </div>
   );
 
   return (
     <div style={{minHeight:"100vh",background:"#F0F4FF",fontFamily:"'Segoe UI',system-ui,sans-serif",display:"flex",flexDirection:"column"}}>
       {projModal && <ProjectModal initial={projModal} onSave={function(n,e,c){
-        if(projModal.id){
-          setProjects(function(ps){return ps.map(function(p){return p.id===projModal.id?Object.assign({},p,{name:n,emoji:e,color:c}):p;});});
-        } else { addProject(n,e,c); }
-        setProjModal(null);
+        if(projModal.id) updateProject(projModal.id,n,e,c);
+        else addProject(n,e,c);
       }} onClose={function(){setProjModal(null);}}/>}
 
       {/* TOPBAR */}
       <div style={{background:"linear-gradient(135deg,#0F172A,#1E293B)",boxShadow:"0 4px 24px rgba(0,0,0,.35)",position:"sticky",top:0,zIndex:100,flexShrink:0}}>
-        <div style={{padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid #1E293B"}}>
+        <div style={{padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid rgba(255,255,255,.05)"}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <button onClick={function(){setSidebarOpen(function(o){return !o;});}} style={{border:"none",background:"rgba(255,255,255,.06)",color:"#94A3B8",width:34,height:34,borderRadius:8,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}
-              onMouseEnter={function(e){e.currentTarget.style.background="rgba(255,255,255,.1)";}} onMouseLeave={function(e){e.currentTarget.style.background="rgba(255,255,255,.06)";}}>
-              ☰
-            </button>
-            <div style={{width:36,height:36,borderRadius:10,background:"linear-gradient(135deg,"+activeProj.color+","+activeProj.color+"aa"+")",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>
+            <button onClick={function(){setSidebarOpen(function(o){return !o;});}}
+              style={{border:"none",background:"rgba(255,255,255,.06)",color:"#94A3B8",width:34,height:34,borderRadius:8,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}
+              onMouseEnter={function(e){e.currentTarget.style.background="rgba(255,255,255,.12)";}}
+              onMouseLeave={function(e){e.currentTarget.style.background="rgba(255,255,255,.06)";}}>☰</button>
+            <div style={{width:36,height:36,borderRadius:10,background:activeProj.color+"33",border:"1.5px solid "+activeProj.color+"66",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>
               {activeProj.emoji}
             </div>
             <div>
               <div style={{color:"#fff",fontWeight:900,fontSize:15,letterSpacing:"-.3px"}}>{activeProj.name}</div>
               <div style={{color:"#475569",fontSize:11,display:"flex",alignItems:"center",gap:6}}>
                 Release Tracker
-                {saving && <span style={{background:"#1E293B",color:"#60A5FA",fontSize:10,padding:"1px 8px",borderRadius:20,fontWeight:600,animation:"pulse 1s infinite"}}>⏳ Zapis…</span>}
+                {saving && <span style={{background:"#1E293B",color:"#60A5FA",fontSize:10,padding:"1px 8px",borderRadius:20,fontWeight:600,animation:"pulse 1s infinite"}}>⏳ Zapisywanie…</span>}
                 {!saving && lastSaved && <span style={{background:"#1E293B",color:"#34D399",fontSize:10,padding:"1px 8px",borderRadius:20,fontWeight:600}}>✓ {lastSaved.toLocaleTimeString("pl")}</span>}
               </div>
             </div>
@@ -1244,7 +1333,7 @@ function App() {
                   <div style={{height:"100%",width:releaseHealth+"%",background:hColor,borderRadius:99,transition:"width .8s"}}/>
                 </div>
               </div>
-              <div style={{fontSize:22,fontWeight:900,color:hColor,letterSpacing:"-1.5px"}}>{releaseHealth}%</div>
+              <div style={{fontSize:22,fontWeight:900,color:hColor,letterSpacing:"-1.5px",minWidth:48,textAlign:"right"}}>{releaseHealth}%</div>
             </div>
           )}
         </div>
@@ -1253,13 +1342,14 @@ function App() {
           {activeProj.sheets.map(function(s){
             var isA = activeSheetId===s.id;
             return (
-              <div key={s.id} className="tab-item" onClick={function(){setActiveSheetId(s.id);}}
-                style={{display:"flex",alignItems:"center",gap:6,padding:"0 10px",cursor:"pointer",flexShrink:0,
-                  borderBottom:isA?"3px solid #60A5FA":"3px solid transparent",
-                  background:isA?"rgba(96,165,250,.08)":"transparent"}}>
+              <div key={s.id} className="tab-pill" onClick={function(){setActiveSheetId(s.id);}}
+                style={{display:"flex",alignItems:"center",gap:5,padding:"0 10px",cursor:"pointer",flexShrink:0,
+                  borderBottom:isA?"3px solid #60A5FA":"3px solid transparent"}}>
                 <span style={{fontSize:12}}>{s.icon||"📄"}</span>
                 {editingTab===s.id ? (
-                  <input autoFocus value={s.name.replace(/^\S+\s/,"")} onBlur={function(){setEditingTab(null);}} onKeyDown={function(e){if(e.key==="Enter")setEditingTab(null);}}
+                  <input autoFocus value={s.name.replace(/^\S+\s/,"")}
+                    onBlur={function(){setEditingTab(null);}}
+                    onKeyDown={function(e){if(e.key==="Enter")setEditingTab(null);}}
                     onChange={function(e){var v=e.target.value;setProjects(function(ps){return ps.map(function(p){return p.id===activeProjId?Object.assign({},p,{sheets:p.sheets.map(function(x){return x.id===s.id?Object.assign({},x,{name:(s.icon||"📄")+" "+v}):x;})}):p;});});}}
                     style={{border:"1px solid #60A5FA",background:"transparent",color:"#fff",fontSize:12,fontFamily:"inherit",borderRadius:4,padding:"2px 6px",width:120}}/>
                 ) : (
@@ -1268,8 +1358,8 @@ function App() {
                     {s.name.replace(/^\S+\s/,"")}
                   </span>
                 )}
-                <button onClick={function(e){e.stopPropagation();duplicateSheet(s.id);}} title="Duplikuj arkusz"
-                  style={{border:"none",background:"none",color:"#334155",cursor:"pointer",fontSize:11,padding:"1px 3px",borderRadius:3,opacity:.5,marginLeft:2}}
+                <button onClick={function(e){e.stopPropagation();duplicateSheet(s.id);}} title="Duplikuj"
+                  style={{border:"none",background:"none",color:"#334155",cursor:"pointer",fontSize:11,padding:"1px 3px",borderRadius:3,opacity:.5}}
                   onMouseEnter={function(e){e.currentTarget.style.color="#60A5FA";e.currentTarget.style.opacity=1;e.currentTarget.style.background="#1E293B";}}
                   onMouseLeave={function(e){e.currentTarget.style.color="#334155";e.currentTarget.style.opacity=.5;e.currentTarget.style.background="none";}}>⧉</button>
                 {activeProj.sheets.length>1 && (
@@ -1285,13 +1375,13 @@ function App() {
             <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px"}}>
               <input autoFocus value={newSheetName} onChange={function(e){setNewSheetName(e.target.value);}}
                 onKeyDown={function(e){if(e.key==="Enter")addSheet();if(e.key==="Escape")setNewSheetMode(false);}}
-                placeholder="Nazwa…" style={{border:"1px solid #60A5FA",background:"rgba(255,255,255,.08)",color:"#fff",fontSize:12,borderRadius:8,padding:"4px 10px",fontFamily:"inherit",width:150}}/>
+                placeholder="Nazwa arkusza…" style={{border:"1px solid #60A5FA",background:"rgba(255,255,255,.08)",color:"#fff",fontSize:12,borderRadius:8,padding:"4px 10px",fontFamily:"inherit",width:150}}/>
               <button onClick={addSheet} style={{border:"none",background:"#10B981",color:"#fff",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>✓</button>
               <button onClick={function(){setNewSheetMode(false);}} style={{border:"none",background:"#475569",color:"#fff",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12}}>✕</button>
             </div>
           ) : (
             <button onClick={function(){setNewSheetMode(true);}}
-              style={{border:"none",background:"transparent",color:"#475569",cursor:"pointer",fontSize:22,padding:"0 12px",fontWeight:300,lineHeight:1,transition:"color .15s"}}
+              style={{border:"none",background:"transparent",color:"#475569",cursor:"pointer",fontSize:22,padding:"0 12px",fontWeight:300,lineHeight:1}}
               onMouseEnter={function(e){e.currentTarget.style.color="#60A5FA";}} onMouseLeave={function(e){e.currentTarget.style.color="#475569";}}>+</button>
           )}
         </div>
@@ -1301,12 +1391,13 @@ function App() {
       <div style={{display:"flex",flex:1,minHeight:0}}>
         {/* SIDEBAR */}
         {sidebarOpen && (
-          <div style={{width:230,background:"#0F172A",flexShrink:0,display:"flex",flexDirection:"column",borderRight:"1px solid #1E293B",animation:"slideLeft .2s ease"}}>
+          <div style={{width:240,background:"#0F172A",flexShrink:0,display:"flex",flexDirection:"column",borderRight:"1px solid #1E293B",animation:"slideLeft .2s ease"}}>
             <div style={{padding:"16px 14px 10px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-              <span style={{fontSize:11,fontWeight:800,color:"#475569",textTransform:"uppercase",letterSpacing:".08em"}}>Projekty</span>
+              <span style={{fontSize:11,fontWeight:800,color:"#334155",textTransform:"uppercase",letterSpacing:".08em"}}>Projekty</span>
               <button onClick={function(){setProjModal({});}} title="Nowy projekt"
-                style={{border:"none",background:"rgba(96,165,250,.1)",color:"#60A5FA",width:26,height:26,borderRadius:6,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:300}}
-                onMouseEnter={function(e){e.currentTarget.style.background="rgba(96,165,250,.2)";}} onMouseLeave={function(e){e.currentTarget.style.background="rgba(96,165,250,.1)";}}>+</button>
+                style={{border:"none",background:"rgba(96,165,250,.12)",color:"#60A5FA",width:26,height:26,borderRadius:6,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}
+                onMouseEnter={function(e){e.currentTarget.style.background="rgba(96,165,250,.25)";}}
+                onMouseLeave={function(e){e.currentTarget.style.background="rgba(96,165,250,.12)";}}>+</button>
             </div>
             <div style={{flex:1,overflowY:"auto",padding:"0 8px 16px"}}>
               {projects.map(function(p){
@@ -1315,26 +1406,25 @@ function App() {
                 return (
                   <div key={p.id} className="proj-item" onClick={function(){setActiveProjId(p.id);setActiveSheetId(p.sheets[0].id);}}
                     style={{padding:"10px 12px",borderRadius:10,cursor:"pointer",marginBottom:4,
-                      background:isActive?"rgba(96,165,250,.12)":"transparent",
-                      border:"1px solid "+(isActive?"rgba(96,165,250,.25)":"transparent"),
-                      transition:"all .15s"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10}}>
-                      <div style={{width:32,height:32,borderRadius:8,background:p.color+"22",border:"1.5px solid "+p.color+"44",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>
+                      background:isActive?"rgba(96,165,250,.1)":"transparent",
+                      border:"1px solid "+(isActive?"rgba(96,165,250,.2)":"transparent"),transition:"all .15s"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:9}}>
+                      <div style={{width:32,height:32,borderRadius:8,background:p.color+"22",border:"1.5px solid "+p.color+"55",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>
                         {p.emoji}
                       </div>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{color:isActive?"#F8FAFC":"#CBD5E1",fontWeight:isActive?700:500,fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
-                        <div style={{color:"#475569",fontSize:10,marginTop:2}}>{p.sheets.length} arkuszy · {totalRows} wierszy</div>
+                        <div style={{color:isActive?"#F8FAFC":"#94A3B8",fontWeight:isActive?700:500,fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
+                        <div style={{color:"#334155",fontSize:10,marginTop:2}}>{p.sheets.length} ark. · {totalRows} wierszy</div>
                       </div>
-                      <div style={{display:"flex",gap:2,flexShrink:0}}>
-                        <button onClick={function(e){e.stopPropagation();setProjModal(p);}} style={{border:"none",background:"none",color:"#334155",cursor:"pointer",fontSize:10,padding:"2px",borderRadius:3,opacity:.5}}
-                          onMouseEnter={function(e){e.currentTarget.style.opacity=1;e.currentTarget.style.color="#60A5FA";}} onMouseLeave={function(e){e.currentTarget.style.opacity=.5;e.currentTarget.style.color="#334155";}}>✏️</button>
-                        {projects.length>1 && <button onClick={function(e){e.stopPropagation();deleteProject(p.id);}} style={{border:"none",background:"none",color:"#334155",cursor:"pointer",fontSize:10,padding:"2px",borderRadius:3,opacity:.5}}
-                          onMouseEnter={function(e){e.currentTarget.style.opacity=1;e.currentTarget.style.color="#F87171";}} onMouseLeave={function(e){e.currentTarget.style.opacity=.5;e.currentTarget.style.color="#334155";}}>🗑</button>}
+                      <div style={{display:"flex",flexDirection:"column",gap:2,flexShrink:0}}>
+                        <button onClick={function(e){e.stopPropagation();setProjModal(p);}} style={{border:"none",background:"none",color:"#334155",cursor:"pointer",fontSize:10,padding:"1px 3px",borderRadius:3,lineHeight:1}}
+                          onMouseEnter={function(e){e.currentTarget.style.color="#60A5FA";}} onMouseLeave={function(e){e.currentTarget.style.color="#334155";}}>✏️</button>
+                        {projects.length>1 && <button onClick={function(e){e.stopPropagation();deleteProject(p.id);}} style={{border:"none",background:"none",color:"#334155",cursor:"pointer",fontSize:10,padding:"1px 3px",borderRadius:3,lineHeight:1}}
+                          onMouseEnter={function(e){e.currentTarget.style.color="#F87171";}} onMouseLeave={function(e){e.currentTarget.style.color="#334155";}}>🗑</button>}
                       </div>
                     </div>
                     {isActive && (
-                      <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid rgba(255,255,255,.06)"}}>
+                      <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid rgba(255,255,255,.05)"}}>
                         {p.sheets.map(function(s){
                           return (
                             <div key={s.id} onClick={function(e){e.stopPropagation();setActiveSheetId(s.id);}}
@@ -1343,8 +1433,8 @@ function App() {
                               onMouseEnter={function(e){if(activeSheetId!==s.id)e.currentTarget.style.background="rgba(255,255,255,.04)";}}
                               onMouseLeave={function(e){if(activeSheetId!==s.id)e.currentTarget.style.background="transparent";}}>
                               <span style={{fontSize:11}}>{s.icon||"📄"}</span>
-                              <span style={{fontSize:12,color:activeSheetId===s.id?"#93C5FD":"#64748B",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name.replace(/^\S+\s/,"")}</span>
-                              <span style={{marginLeft:"auto",fontSize:10,color:"#334155",flexShrink:0}}>{s.rows.length}</span>
+                              <span style={{fontSize:12,color:activeSheetId===s.id?"#93C5FD":"#475569",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{s.name.replace(/^\S+\s/,"")}</span>
+                              <span style={{fontSize:10,color:"#334155",flexShrink:0}}>{s.rows.length}</span>
                             </div>
                           );
                         })}
@@ -1353,6 +1443,11 @@ function App() {
                   </div>
                 );
               })}
+            </div>
+            <div style={{padding:"12px",borderTop:"1px solid #1E293B",fontSize:10,color:"#334155",lineHeight:1.6}}>
+              💡 Kliknij # wiersza → szczegóły<br/>
+              ✨ Import → wklej tekst z ChatGPT<br/>
+              ⧉ Duplikuj arkusz · + Nowy projekt
             </div>
           </div>
         )}
@@ -1364,57 +1459,15 @@ function App() {
               <div style={{marginBottom:20}}>
                 <h1 style={{fontSize:22,fontWeight:900,color:"#0F172A",letterSpacing:"-.5px",margin:0}}>{activeSheet.name}</h1>
                 <p style={{color:"#94A3B8",fontSize:12,margin:"5px 0 0"}}>
-                  💡 Kliknij numer wiersza → panel szczegółów · 📋 Import (wklej/plik) · 📥 Eksport do Excel/Sheets · ⧉ duplikuj zakładkę
+                  Projekt: <strong style={{color:activeProj.color}}>{activeProj.emoji} {activeProj.name}</strong>
+                  &nbsp;·&nbsp;{activeSheet.rows.length} wierszy
+                  &nbsp;·&nbsp;Kliknij <strong>#</strong> wiersza → panel szczegółów
+                  &nbsp;·&nbsp;<strong>✨ Import</strong> → wklej tekst / plik
                 </p>
               </div>
               <SheetView sheet={activeSheet} onChange={updateSheet}/>
             </div>
           )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── PROJECT MODAL ─────────────────────────────────────────────────────────────
-function ProjectModal({initial, onSave, onClose}) {
-  var isEdit = !!(initial && initial.id);
-  var [name, setName] = useState(initial&&initial.name?initial.name.replace(/^\S+\s/,""):"");
-  var [emoji, setEmoji] = useState((initial&&initial.emoji)||"🚀");
-  var [color, setColor] = useState((initial&&initial.color)||"#3B82F6");
-  return (
-    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.7)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)"}}
-      onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
-      <div style={{background:"#fff",borderRadius:20,padding:32,width:420,maxWidth:"calc(100vw - 32px)",boxShadow:"0 30px 80px rgba(0,0,0,.3)",animation:"popIn .2s"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
-          <h3 style={{fontSize:20,fontWeight:800,color:"#0F172A"}}>{isEdit?"✏️ Edytuj projekt":"🆕 Nowy projekt"}</h3>
-          <button onClick={onClose} style={{border:"none",background:"#F1F5F9",fontSize:16,cursor:"pointer",color:"#64748B",width:32,height:32,borderRadius:8}}>✕</button>
-        </div>
-        <div style={{marginBottom:16}}>
-          <label style={{display:"block",fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Nazwa projektu</label>
-          <input value={name} onChange={function(e){setName(e.target.value);}} placeholder="np. E-commerce, HC PROD, CRM…"
-            style={{width:"100%",border:"1.5px solid #E2E8F0",borderRadius:10,padding:"10px 14px",fontSize:14,fontFamily:"inherit"}}
-            onFocus={function(e){e.currentTarget.style.borderColor="#3B82F6";}} onBlur={function(e){e.currentTarget.style.borderColor="#E2E8F0";}}/>
-        </div>
-        <div style={{marginBottom:16}}>
-          <label style={{display:"block",fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Emoji</label>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-            {PROJECT_EMOJIS.map(function(e){
-              return <div key={e} onClick={function(){setEmoji(e);}} style={{width:36,height:36,borderRadius:8,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,border:"2px solid "+(emoji===e?"#3B82F6":"#E2E8F0"),background:emoji===e?"#EFF6FF":"#F8FAFC"}}>{e}</div>;
-            })}
-          </div>
-        </div>
-        <div style={{marginBottom:24}}>
-          <label style={{display:"block",fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Kolor</label>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            {PROJECT_COLORS.map(function(c){
-              return <div key={c} onClick={function(){setColor(c);}} style={{width:28,height:28,borderRadius:"50%",background:c,cursor:"pointer",border:"3px solid "+(color===c?"#0F172A":"transparent"),transform:color===c?"scale(1.2)":"scale(1)",transition:"transform .15s"}}/>;
-            })}
-          </div>
-        </div>
-        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
-          <button onClick={onClose} style={{border:"1.5px solid #E2E8F0",background:"transparent",color:"#64748B",padding:"10px 22px",borderRadius:10,cursor:"pointer",fontSize:14,fontFamily:"inherit",fontWeight:600}}>Anuluj</button>
-          <button onClick={function(){if(name.trim())onSave(name.trim(),emoji,color);}} style={{border:"none",background:"linear-gradient(135deg,#1E293B,#0F172A)",color:"#fff",padding:"10px 22px",borderRadius:10,cursor:"pointer",fontSize:14,fontFamily:"inherit",fontWeight:700}}>{isEdit?"Zapisz":"Utwórz projekt"}</button>
         </div>
       </div>
     </div>
