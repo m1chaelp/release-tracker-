@@ -1,1144 +1,477 @@
-<!DOCTYPE html>
-<html lang="pl">
-<head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Release Tracker</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
-<style>
-*{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'Segoe UI',system-ui,sans-serif;background:#F0F4FF;min-height:100vh;overflow-x:hidden;}
-input,textarea,select{outline:none;}
-@keyframes popIn{from{opacity:0;transform:scale(.94) translateY(-6px)}to{opacity:1;transform:none}}
-@keyframes slideIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
-@keyframes slideRight{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:none}}
-@keyframes slideLeft{from{opacity:0;transform:translateX(-40px)}to{opacity:1;transform:none}}
-@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-::-webkit-scrollbar{height:4px;width:4px;}
-::-webkit-scrollbar-track{background:#1E293B;}
-::-webkit-scrollbar-thumb{background:#334155;border-radius:2px;}
-.row-hover:hover{background:#EFF6FF !important;}
-.row-hover:hover .row-num{opacity:1 !important;}
-.proj-item:hover{background:rgba(255,255,255,.07) !important;}
-.tab-pill:hover{background:rgba(96,165,250,.08) !important;}
-</style>
-</head>
-<body>
-<div id="root"></div>
-<script type="text/babel">
-var useState = React.useState;
-var useEffect = React.useEffect;
-var useRef = React.useRef;
-var useCallback = React.useCallback;
+import { useState, useEffect, useRef } from "react";
 
-var ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
-var SHEETS_API = "https://script.google.com/macros/s/AKfycbynq8YaWYZjhNYR1dHsi4tLoA5YKGfif9xcF_xdHbGy91CWJuf0wL4hwY6mEn97769M/exec";
-
-var STATUS_OPTS = [
+const STATUS_OPTS = [
   {label:"Zakończone",     bg:"#D1FAE5",color:"#065F46",dot:"#10B981",border:"#6EE7B7"},
   {label:"W toku",         bg:"#E0F2FE",color:"#075985",dot:"#0EA5E9",border:"#7DD3FC"},
   {label:"Nie rozpoczęte", bg:"#FEE2E2",color:"#991B1B",dot:"#EF4444",border:"#FCA5A5"},
   {label:"Wstrzymane",     bg:"#DBEAFE",color:"#1E3A8A",dot:"#3B82F6",border:"#93C5FD"},
   {label:"Do wyjaśnienia", bg:"#FEF9C3",color:"#854D0E",dot:"#EAB308",border:"#FDE047"},
 ];
-var TEST_STATES = [
+const TEST_STATES = [
   {key:"untested",label:"Nie testowano",icon:"○",bg:"#F8FAFC",color:"#94A3B8",border:"#E2E8F0",dot:"#CBD5E1"},
   {key:"pass",    label:"Przeszły",     icon:"✓",bg:"#D1FAE5",color:"#065F46",border:"#6EE7B7",dot:"#10B981"},
   {key:"fail",    label:"Nie przeszły", icon:"✕",bg:"#FEE2E2",color:"#991B1B",border:"#FCA5A5",dot:"#EF4444"},
   {key:"running", label:"W trakcie",    icon:"▶",bg:"#FEF9C3",color:"#854D0E",border:"#FDE047",dot:"#EAB308"},
   {key:"skipped", label:"Pominięte",    icon:"⏭",bg:"#F3E8FF",color:"#6B21A8",border:"#D8B4FE",dot:"#A855F7"},
 ];
-var PALETTE = [
+const PALETTE = [
   {bg:"#D1FAE5",color:"#065F46",dot:"#10B981",border:"#6EE7B7"},
   {bg:"#FEE2E2",color:"#991B1B",dot:"#EF4444",border:"#FCA5A5"},
   {bg:"#DBEAFE",color:"#1E3A8A",dot:"#3B82F6",border:"#93C5FD"},
   {bg:"#FEF9C3",color:"#854D0E",dot:"#EAB308",border:"#FDE047"},
   {bg:"#F3E8FF",color:"#6B21A8",dot:"#A855F7",border:"#D8B4FE"},
   {bg:"#E0F2FE",color:"#075985",dot:"#0EA5E9",border:"#7DD3FC"},
-  {bg:"#FFE4E6",color:"#9F1239",dot:"#F43F5E",border:"#FCA5A5"},
-  {bg:"#FEF3C7",color:"#92400E",dot:"#F59E0B",border:"#FCD34D"},
 ];
-var PROJECT_COLORS = ["#3B82F6","#10B981","#F59E0B","#EF4444","#8B5CF6","#EC4899","#14B8A6","#F97316"];
-var PROJECT_EMOJIS = ["🚀","💼","🛒","🏗️","⚡","🔥","💎","🌟","🎯","🛡️","🎨","🔧"];
+const PROJECT_COLORS = ["#3B82F6","#10B981","#F59E0B","#EF4444","#8B5CF6","#EC4899","#14B8A6","#F97316"];
+const PROJECT_EMOJIS = ["🚀","💼","🛒","🏗️","⚡","🔥","💎","🌟","🎯","🛡️","🎨","🔧"];
 
-function mkId() { return "id_" + Date.now() + "_" + Math.random().toString(36).slice(2,7); }
-function emptyTest() { return {state:"untested",note:""}; }
+let _id = 1;
+const mkId = () => `id_${_id++}_${Math.random().toString(36).slice(2,5)}`;
+const emptyTest = () => ({state:"untested",note:""});
 
-function mkChecklistSheet(rows) {
-  return {
-    id: mkId(), name:"✅ Checklist", icon:"✅",
-    columns:[
-      {id:"col_func",  name:"Funkcjonalność", type:"text"},
-      {id:"col_opis",  name:"Opis",           type:"text"},
-      {id:"col_status",name:"Status",         type:"status", options:STATUS_OPTS},
-      {id:"col_testy", name:"Testy",          type:"test"},
-      {id:"col_kom",   name:"Komentarz",      type:"text", comment:true},
-      {id:"col_pokr",  name:"Pokrycie",       type:"checkbox"},
-    ],
-    rows: rows || []
-  };
-}
+const mkChecklistSheet = (rows=[]) => ({
+  id:mkId(), name:"✅ Checklist", icon:"✅",
+  columns:[
+    {id:"col_func",  name:"Funkcjonalność",type:"text"},
+    {id:"col_opis",  name:"Opis",          type:"text"},
+    {id:"col_status",name:"Status",        type:"status",options:STATUS_OPTS},
+    {id:"col_testy", name:"Testy",         type:"test"},
+    {id:"col_kom",   name:"Komentarz",     type:"text",comment:true},
+    {id:"col_pokr",  name:"Pokrycie",      type:"checkbox"},
+  ],
+  rows
+});
 
-var defaultProjects = [
+const defaultProjects = [
   {
     id:"proj_default", name:"E-commerce Platform", emoji:"🛒", color:"#3B82F6",
     sheets:[
       {
-        id:"sheet_release_tasks", name:"🚀 Zadania do Release", icon:"🚀",
+        id:"sheet_tasks", name:"🚀 Zadania do Release", icon:"🚀",
         columns:[
-          {id:"col_opis", name:"Opis",           type:"text"},
-          {id:"col_task", name:"Task",            type:"text"},
-          {id:"col_be",   name:"Status Backend",  type:"status", options:STATUS_OPTS},
-          {id:"col_fe",   name:"Status Frontend", type:"status", options:STATUS_OPTS},
-          {id:"col_testy",name:"Testy",           type:"test"},
-          {id:"col_kom",  name:"Komentarz",       type:"text", comment:true},
+          {id:"col_opis",name:"Opis",          type:"text"},
+          {id:"col_task",name:"Task",           type:"text"},
+          {id:"col_be",  name:"Status Backend", type:"status",options:STATUS_OPTS},
+          {id:"col_fe",  name:"Status Frontend",type:"status",options:STATUS_OPTS},
+          {id:"col_test",name:"Testy",          type:"test"},
+          {id:"col_kom", name:"Komentarz",      type:"text",comment:true},
         ],
         rows:[
-          {id:mkId(),col_opis:"Zwroty",                 col_task:"",col_be:"Zakończone",    col_fe:"W toku",        col_testy:{state:"running", note:"Test zwrot"},                   col_kom:""},
-          {id:mkId(),col_opis:"Generowanie Faktury",    col_task:"",col_be:"W toku",        col_fe:"W toku",        col_testy:{state:"running", note:"Pobieranie właściwej faktury"}, col_kom:""},
-          {id:mkId(),col_opis:"InPost Pay",             col_task:"",col_be:"Wstrzymane",    col_fe:"Wstrzymane",    col_testy:{state:"untested",note:""},                             col_kom:"Czekamy na credentials"},
-          {id:mkId(),col_opis:"Pobieranie NIP GUS",     col_task:"",col_be:"Zakończone",    col_fe:"Nie rozpoczęte",col_testy:{state:"untested",note:""},                             col_kom:""},
-          {id:mkId(),col_opis:"Usuwanie Konta",         col_task:"",col_be:"Nie rozpoczęte",col_fe:"Nie rozpoczęte",col_testy:{state:"untested",note:""},                            col_kom:""},
-          {id:mkId(),col_opis:"Base - konfiguracja",    col_task:"",col_be:"W toku",        col_fe:"W toku",        col_testy:{state:"untested",note:""},                             col_kom:""},
-          {id:mkId(),col_opis:"Opłacenie zamówienia",   col_task:"",col_be:"Zakończone",    col_fe:"W toku",        col_testy:{state:"fail",    note:"Poprawka - za pobraniem"},      col_kom:""},
-          {id:mkId(),col_opis:"Darmowa dostawa",        col_task:"",col_be:"Zakończone",    col_fe:"W toku",        col_testy:{state:"fail",    note:"Poprawka do darmowej dostawy"}, col_kom:""},
-          {id:mkId(),col_opis:"Opinie/Recenzje",        col_task:"",col_be:"Zakończone",    col_fe:"Nie rozpoczęte",col_testy:{state:"untested",note:""},                             col_kom:""},
-          {id:mkId(),col_opis:"Karta produktu",         col_task:"",col_be:"Zakończone",    col_fe:"W toku",        col_testy:{state:"pass",    note:"Ostatnia poprawka na mobile"},  col_kom:""},
-          {id:mkId(),col_opis:"Kupony rabatowe",        col_task:"",col_be:"Zakończone",    col_fe:"Zakończone",    col_testy:{state:"pass",    note:""},                              col_kom:""},
-          {id:mkId(),col_opis:"Auth",                   col_task:"",col_be:"Zakończone",    col_fe:"Zakończone",    col_testy:{state:"pass",    note:""},                              col_kom:""},
-          {id:mkId(),col_opis:"Podsumowanie zamówienia",col_task:"",col_be:"Zakończone",    col_fe:"Zakończone",    col_testy:{state:"pass",    note:""},                              col_kom:""},
-          {id:mkId(),col_opis:"Listy zakupowe",         col_task:"",col_be:"Zakończone",    col_fe:"Zakończone",    col_testy:{state:"pass",    note:""},                              col_kom:""},
-          {id:mkId(),col_opis:"Wyszukiwarka i Homepage",col_task:"",col_be:"Zakończone",    col_fe:"Zakończone",    col_testy:{state:"pass",    note:""},                              col_kom:""},
+          {id:mkId(),col_opis:"Zwroty",                 col_task:"",col_be:"Zakończone",    col_fe:"W toku",        col_test:{state:"running",note:"Test zwrot"},    col_kom:""},
+          {id:mkId(),col_opis:"Generowanie Faktury",    col_task:"",col_be:"W toku",        col_fe:"W toku",        col_test:{state:"running",note:""},              col_kom:""},
+          {id:mkId(),col_opis:"InPost Pay",             col_task:"",col_be:"Wstrzymane",    col_fe:"Wstrzymane",    col_test:{state:"untested",note:""},             col_kom:"Czekamy na credentials"},
+          {id:mkId(),col_opis:"Opłacenie zamówienia",   col_task:"",col_be:"Zakończone",    col_fe:"W toku",        col_test:{state:"fail",note:"Poprawka"},         col_kom:""},
+          {id:mkId(),col_opis:"Kupony rabatowe",        col_task:"",col_be:"Zakończone",    col_fe:"Zakończone",    col_test:{state:"pass",note:""},                 col_kom:""},
+          {id:mkId(),col_opis:"Auth",                   col_task:"",col_be:"Zakończone",    col_fe:"Zakończone",    col_test:{state:"pass",note:""},                 col_kom:""},
+          {id:mkId(),col_opis:"Karta produktu",         col_task:"",col_be:"Zakończone",    col_fe:"W toku",        col_test:{state:"pass",note:"mobile fix"},       col_kom:""},
+          {id:mkId(),col_opis:"Wyszukiwarka",           col_task:"",col_be:"Zakończone",    col_fe:"Zakończone",    col_test:{state:"pass",note:""},                 col_kom:""},
         ]
       },
       mkChecklistSheet([
-        {id:mkId(),col_func:"Logowanie",             col_opis:"Sprawdzenie logowania i komunikatów błędu.",   col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
-        {id:mkId(),col_func:"Rejestracja",            col_opis:"Sprawdzenie rejestracji i walidacji pól.",    col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
-        {id:mkId(),col_func:"Ustawienia konta",       col_opis:"Sprawdzenie edycji danych i adresów.",        col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
-        {id:mkId(),col_func:"Wszystkie zakładki",     col_opis:"Sprawdzenie działania wszystkich sekcji.",    col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
-        {id:mkId(),col_func:"Homepage",               col_opis:"Sprawdzenie homepage i motywu jasny/ciemny.", col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
-        {id:mkId(),col_func:"Produkty",               col_opis:"Sprawdzenie listy produktów i kart produktu.",col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
-        {id:mkId(),col_func:"Wyszukiwanie produktów", col_opis:"Sprawdzenie działania wyszukiwarki.",         col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
+        {id:mkId(),col_func:"Logowanie",            col_opis:"Sprawdzenie logowania i komunikatów błędu.",   col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
+        {id:mkId(),col_func:"Rejestracja",           col_opis:"Sprawdzenie rejestracji i walidacji pól.",    col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
+        {id:mkId(),col_func:"Ustawienia konta",      col_opis:"Sprawdzenie edycji danych i adresów.",        col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
+        {id:mkId(),col_func:"Homepage",              col_opis:"Sprawdzenie homepage i motywu jasny/ciemny.", col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
+        {id:mkId(),col_func:"Produkty",              col_opis:"Sprawdzenie listy produktów i kart produktu.",col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
+        {id:mkId(),col_func:"Wyszukiwanie",          col_opis:"Sprawdzenie działania wyszukiwarki.",         col_status:"W toku",col_testy:{state:"untested",note:""},col_kom:"",col_pokr:false},
       ])
     ]
   }
 ];
 
-async function loadData() {
-  try {
-    var r = await fetch(SHEETS_API);
-    var text = await r.text();
-    var parsed = JSON.parse(text);
-    if (parsed && parsed.projects && Array.isArray(parsed.projects) && parsed.projects.length > 0) return parsed.projects;
-    if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].columns) {
-      return [{id:mkId(),name:"Mój Projekt",emoji:"📋",color:"#3B82F6",sheets:parsed}];
-    }
-    return defaultProjects;
-  } catch(e) { return defaultProjects; }
-}
-async function saveData(projects) {
-  try { await fetch(SHEETS_API, {method:"POST",mode:"no-cors",body:JSON.stringify({projects:projects})}); } catch(e) {}
-}
-
-// ── PORTAL DROPDOWN HOOK ──────────────────────────────────────────────────────
-function usePortalDropdown(triggerRef, open) {
-  var initial = {position:"fixed",top:0,left:0,bottom:"auto"};
-  var pair = useState(initial);
-  var style = pair[0];
-  var setStyle = pair[1];
-  useEffect(function() {
-    if (open && triggerRef.current) {
-      var r = triggerRef.current.getBoundingClientRect();
-      var spaceBelow = window.innerHeight - r.bottom;
-      var goUp = spaceBelow < 300;
-      setStyle({
-        position:"fixed",
-        top: goUp ? "auto" : r.bottom + 6,
-        bottom: goUp ? (window.innerHeight - r.top + 6) : "auto",
-        left: Math.max(8, Math.min(r.left, window.innerWidth - 320)),
-      });
-    }
-  }, [open]);
-  return style;
-}
-
-// ── STATUS CELL ──────────────────────────────────────────────────────────────
-function StatusCell(props) {
-  var value = props.value; var options = props.options; var onChange = props.onChange;
-  var pair = useState(false); var open = pair[0]; var setOpen = pair[1];
-  var ref = useRef();
-  var opts = options || STATUS_OPTS;
-  var opt = opts.find(function(o){return o.label===value;}) || opts[0];
-  var dropStyle = usePortalDropdown(ref, open);
-  useEffect(function() {
-    var fn = function(e) {
-      var portal = document.getElementById("status-portal");
-      if (!(ref.current && ref.current.contains(e.target)) && !(portal && portal.contains(e.target))) setOpen(false);
-    };
+// ── STATUS CELL ───────────────────────────────────────────────────────────────
+function StatusCell({value, options, onChange}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef();
+  const opts = options || STATUS_OPTS;
+  const opt = opts.find(o => o.label===value) || opts[0];
+  useEffect(() => {
+    const fn = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     if (open) document.addEventListener("mousedown", fn);
-    return function() { document.removeEventListener("mousedown", fn); };
+    return () => document.removeEventListener("mousedown", fn);
   }, [open]);
   return (
-    <div ref={ref} style={{userSelect:"none"}}>
-      <div onClick={function(){setOpen(function(o){return !o;});}} style={{
-        display:"flex",alignItems:"center",gap:7,padding:"5px 11px",
-        background:opt.bg,border:"1.5px solid "+opt.border,borderRadius:20,
-        cursor:"pointer",justifyContent:"space-between",minWidth:140,
-        boxShadow:open?"0 0 0 3px "+opt.dot+"28":"none",transition:"box-shadow .15s"
+    <div ref={ref} style={{position:"relative",userSelect:"none",display:"inline-block"}}>
+      <div onClick={() => setOpen(o => !o)} style={{
+        display:"flex",alignItems:"center",gap:6,padding:"4px 10px",
+        background:opt.bg,border:`1.5px solid ${opt.border}`,borderRadius:20,cursor:"pointer",minWidth:130,
+        boxShadow:open?`0 0 0 3px ${opt.dot}28`:"none"
       }}>
-        <span style={{display:"flex",alignItems:"center",gap:6}}>
-          <span style={{width:7,height:7,borderRadius:"50%",background:opt.dot,flexShrink:0}}/>
-          <span style={{color:opt.color,fontWeight:700,fontSize:12}}>{opt.label}</span>
-        </span>
-        <span style={{color:opt.color,fontSize:8,opacity:.6,transform:open?"rotate(180deg)":"none",display:"inline-block",transition:"transform .2s"}}>▾</span>
+        <span style={{width:7,height:7,borderRadius:"50%",background:opt.dot,flexShrink:0}}/>
+        <span style={{color:opt.color,fontWeight:700,fontSize:12,flex:1}}>{opt.label}</span>
+        <span style={{color:opt.color,fontSize:8,opacity:.6,transform:open?"rotate(180deg)":"none",display:"inline-block",transition:"transform .15s"}}>▾</span>
       </div>
-      {open && ReactDOM.createPortal(
-        <div id="status-portal" style={Object.assign({},dropStyle,{
-          zIndex:9999,background:"#fff",borderRadius:14,minWidth:190,
-          boxShadow:"0 16px 48px rgba(0,0,0,.2)",border:"1px solid #E2E8F0",overflow:"hidden",
-          animation:"popIn .15s cubic-bezier(.34,1.56,.64,1)"
-        })}>
-          <div style={{padding:"8px 12px 4px",fontSize:10,fontWeight:800,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".08em",borderBottom:"1px solid #F1F5F9"}}>Status</div>
-          {opts.map(function(o) {
-            return (
-              <div key={o.label} onClick={function(){onChange(o.label);setOpen(false);}}
-                style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",cursor:"pointer",
-                  background:value===o.label?o.bg:"transparent",
-                  borderLeft:"3px solid "+(value===o.label?o.dot:"transparent")}}
-                onMouseEnter={function(e){if(value!==o.label)e.currentTarget.style.background="#F8FAFC";}}
-                onMouseLeave={function(e){if(value!==o.label)e.currentTarget.style.background="transparent";}}>
-                <span style={{width:9,height:9,borderRadius:"50%",background:o.dot,flexShrink:0}}/>
-                <span style={{color:o.color,fontWeight:700,fontSize:13}}>{o.label}</span>
-                {value===o.label && <span style={{marginLeft:"auto",color:o.dot,fontSize:12,fontWeight:900}}>✓</span>}
-              </div>
-            );
-          })}
-        </div>, document.body
+      {open && (
+        <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,zIndex:999,background:"#fff",
+          borderRadius:12,minWidth:180,boxShadow:"0 12px 40px rgba(0,0,0,.18)",border:"1px solid #E2E8F0",overflow:"hidden"}}>
+          {opts.map(o => (
+            <div key={o.label} onClick={() => { onChange(o.label); setOpen(false); }}
+              style={{display:"flex",alignItems:"center",gap:10,padding:"9px 13px",cursor:"pointer",
+                background:value===o.label?o.bg:"transparent",borderLeft:`3px solid ${value===o.label?o.dot:"transparent"}`}}
+              onMouseEnter={e=>{if(value!==o.label)e.currentTarget.style.background="#F8FAFC";}}
+              onMouseLeave={e=>{if(value!==o.label)e.currentTarget.style.background="transparent";}}>
+              <span style={{width:8,height:8,borderRadius:"50%",background:o.dot}}/>
+              <span style={{color:o.color,fontWeight:700,fontSize:12}}>{o.label}</span>
+              {value===o.label && <span style={{marginLeft:"auto",color:o.dot,fontSize:11,fontWeight:900}}>✓</span>}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
 }
 
 // ── TEST CELL ─────────────────────────────────────────────────────────────────
-function TestCell(props) {
-  var value = props.value; var onChange = props.onChange;
-  var val = (value && typeof value==="object") ? value : emptyTest();
-  var pair = useState(false); var open = pair[0]; var setOpen = pair[1];
-  var ref = useRef();
-  var state = TEST_STATES.find(function(t){return t.key===val.state;}) || TEST_STATES[0];
-  var dropStyle = usePortalDropdown(ref, open);
-  useEffect(function() {
-    var fn = function(e) {
-      var portal = document.getElementById("test-portal");
-      if (!(ref.current && ref.current.contains(e.target)) && !(portal && portal.contains(e.target))) setOpen(false);
-    };
+function TestCell({value, onChange}) {
+  const val = (value && typeof value==="object") ? value : emptyTest();
+  const [open, setOpen] = useState(false);
+  const ref = useRef();
+  const state = TEST_STATES.find(t => t.key===val.state) || TEST_STATES[0];
+  useEffect(() => {
+    const fn = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     if (open) document.addEventListener("mousedown", fn);
-    return function() { document.removeEventListener("mousedown", fn); };
+    return () => document.removeEventListener("mousedown", fn);
   }, [open]);
   return (
-    <div ref={ref} style={{userSelect:"none"}}>
-      <div onClick={function(){setOpen(function(o){return !o;});}} style={{
-        display:"flex",alignItems:"center",gap:6,padding:"5px 12px",
-        background:state.bg,border:"1.5px solid "+state.border,
-        borderRadius:20,cursor:"pointer",whiteSpace:"nowrap",
-        boxShadow:open?"0 0 0 3px "+state.dot+"28":"none",transition:"box-shadow .15s"
+    <div ref={ref} style={{position:"relative",userSelect:"none",display:"inline-block"}}>
+      <div onClick={() => setOpen(o => !o)} style={{
+        display:"flex",alignItems:"center",gap:6,padding:"4px 11px",
+        background:state.bg,border:`1.5px solid ${state.border}`,borderRadius:20,cursor:"pointer",whiteSpace:"nowrap",
+        boxShadow:open?`0 0 0 3px ${state.dot}28`:"none"
       }}>
-        <span style={{fontSize:13,fontWeight:900,color:state.dot}}>{state.icon}</span>
+        <span style={{fontSize:12,fontWeight:900,color:state.dot}}>{state.icon}</span>
         <span style={{color:state.color,fontWeight:700,fontSize:12}}>{state.label}</span>
-        <span style={{color:state.color,fontSize:8,opacity:.6,transform:open?"rotate(180deg)":"none",display:"inline-block",transition:"transform .2s"}}>▾</span>
+        <span style={{color:state.color,fontSize:8,opacity:.6,transform:open?"rotate(180deg)":"none",display:"inline-block",transition:"transform .15s"}}>▾</span>
       </div>
-      {open && ReactDOM.createPortal(
-        <div id="test-portal" style={Object.assign({},dropStyle,{
-          zIndex:9999,background:"#fff",borderRadius:16,minWidth:240,
-          boxShadow:"0 20px 60px rgba(0,0,0,.2)",border:"1px solid #E2E8F0",overflow:"hidden",
-          animation:"popIn .15s cubic-bezier(.34,1.56,.64,1)"
-        })}>
-          <div style={{padding:"10px 14px 6px",fontSize:10,fontWeight:800,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".08em",borderBottom:"1px solid #F1F5F9"}}>🧪 Status testów</div>
-          <div style={{padding:6}}>
-          {TEST_STATES.map(function(t) {
-            return (
-              <div key={t.key} onClick={function(){onChange(Object.assign({},val,{state:t.key}));setOpen(false);}}
-                style={{display:"flex",alignItems:"center",gap:12,padding:"9px 12px",borderRadius:10,cursor:"pointer",
-                  background:val.state===t.key?t.bg:"transparent",
-                  border:"1.5px solid "+(val.state===t.key?t.border:"transparent"),marginBottom:2}}
-                onMouseEnter={function(e){if(val.state!==t.key){e.currentTarget.style.background="#F8FAFC";e.currentTarget.style.borderColor="#E2E8F0";}}}
-                onMouseLeave={function(e){if(val.state!==t.key){e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor="transparent";}}}>
-                <span style={{width:34,height:34,borderRadius:10,background:t.bg,border:"2px solid "+t.border,
-                  display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15,color:t.dot,fontWeight:900}}>{t.icon}</span>
-                <div>
-                  <div style={{color:t.color,fontWeight:800,fontSize:13}}>{t.label}</div>
-                  <div style={{color:t.dot,fontSize:10,opacity:.7,marginTop:1}}>
-                    {t.key==="pass"?"Zakończone sukcesem":t.key==="fail"?"Wykryto błędy":t.key==="running"?"Testy w toku":t.key==="skipped"?"Pominięto":"Jeszcze nie testowano"}
-                  </div>
-                </div>
-                {val.state===t.key && <span style={{marginLeft:"auto",width:22,height:22,borderRadius:"50%",background:t.dot,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontWeight:900,flexShrink:0}}>✓</span>}
-              </div>
-            );
-          })}
-          </div>
-        </div>, document.body
+      {open && (
+        <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,zIndex:999,background:"#fff",
+          borderRadius:14,minWidth:230,boxShadow:"0 16px 48px rgba(0,0,0,.2)",border:"1px solid #E2E8F0",overflow:"hidden",padding:6}}>
+          {TEST_STATES.map(t => (
+            <div key={t.key} onClick={() => { onChange({...val,state:t.key}); setOpen(false); }}
+              style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",cursor:"pointer",borderRadius:8,
+                background:val.state===t.key?t.bg:"transparent",border:`1.5px solid ${val.state===t.key?t.border:"transparent"}`,marginBottom:2}}
+              onMouseEnter={e=>{if(val.state!==t.key){e.currentTarget.style.background="#F8FAFC";e.currentTarget.style.borderColor="#E2E8F0";}}}
+              onMouseLeave={e=>{if(val.state!==t.key){e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor="transparent";}}}>
+              <span style={{width:30,height:30,borderRadius:8,background:t.bg,border:`2px solid ${t.border}`,
+                display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:t.dot,fontWeight:900,flexShrink:0}}>{t.icon}</span>
+              <span style={{color:t.color,fontWeight:700,fontSize:12}}>{t.label}</span>
+              {val.state===t.key && <span style={{marginLeft:"auto",color:t.dot,fontWeight:900,fontSize:12}}>✓</span>}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
 }
 
 // ── COMMENT CELL ──────────────────────────────────────────────────────────────
-function CommentCell(props) {
-  var value = props.value; var onChange = props.onChange;
-  var pair = useState(false); var open = pair[0]; var setOpen = pair[1];
-  var p2 = useState(value); var draft = p2[0]; var setDraft = p2[1];
-  var p3 = useState({top:0,left:0}); var pos = p3[0]; var setPos = p3[1];
-  var btnRef = useRef(); var taRef = useRef();
-  var openPanel = function() {
-    setDraft(value);
-    if (btnRef.current) {
-      var r = btnRef.current.getBoundingClientRect();
-      var spaceBelow = window.innerHeight - r.bottom;
-      setPos({
-        top: spaceBelow > 280 ? r.bottom + 6 : r.top - 308,
-        left: Math.max(8, Math.min(r.left, window.innerWidth - 330)),
-      });
-    }
-    setOpen(true);
-    setTimeout(function(){if(taRef.current)taRef.current.focus();}, 50);
-  };
-  var save = function(){onChange(draft);setOpen(false);};
-  var cancel = function(){setDraft(value);setOpen(false);};
-  useEffect(function() {
-    var fn = function(e) {
-      var portal = document.getElementById("comment-portal");
-      if (!(btnRef.current && btnRef.current.contains(e.target)) && !(portal && portal.contains(e.target))) {
-        onChange(draft); setOpen(false);
-      }
-    };
+function CommentCell({value, onChange}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const ref = useRef();
+  const isEmpty = !value || !value.trim();
+  const save = () => { onChange(draft); setOpen(false); };
+  useEffect(() => {
+    const fn = e => { if (ref.current && !ref.current.contains(e.target)) { onChange(draft); setOpen(false); }};
     if (open) document.addEventListener("mousedown", fn);
-    return function() { document.removeEventListener("mousedown", fn); };
+    return () => document.removeEventListener("mousedown", fn);
   }, [open, draft]);
-  var isEmpty = !value || value.trim()==="";
   return (
-    <div style={{userSelect:"none",minWidth:150}}>
-      <div ref={btnRef} onClick={openPanel} style={{
-        display:"flex",alignItems:"center",gap:6,padding:"5px 10px",
-        borderRadius:8,cursor:"pointer",transition:"all .15s",
-        border:"1.5px solid "+(open?"#3B82F6":isEmpty?"#E2E8F0":"#CBD5E1"),
-        background:open?"#EFF6FF":isEmpty?"#F8FAFC":"#fff",minHeight:32,maxWidth:210
-      }}
-        onMouseEnter={function(e){if(!open){e.currentTarget.style.borderColor="#3B82F6";e.currentTarget.style.background="#F0F9FF";}}}
-        onMouseLeave={function(e){if(!open){e.currentTarget.style.borderColor=isEmpty?"#E2E8F0":"#CBD5E1";e.currentTarget.style.background=isEmpty?"#F8FAFC":"#fff";}}}>
-        <span style={{fontSize:11,flexShrink:0}}>💬</span>
+    <div ref={ref} style={{position:"relative",minWidth:140}}>
+      <div onClick={() => { setDraft(value); setOpen(o=>!o); }} style={{
+        display:"flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:8,cursor:"pointer",
+        border:`1.5px solid ${open?"#3B82F6":isEmpty?"#E2E8F0":"#CBD5E1"}`,
+        background:open?"#EFF6FF":isEmpty?"#F8FAFC":"#fff",minHeight:32,maxWidth:200
+      }}>
+        <span style={{fontSize:11}}>💬</span>
         {isEmpty
           ? <span style={{color:"#CBD5E1",fontSize:12,fontStyle:"italic"}}>Dodaj komentarz…</span>
-          : <span style={{color:"#374151",fontSize:12,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:150,display:"block"}}>{value}</span>
+          : <span style={{color:"#374151",fontSize:12,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:140,display:"block"}}>{value}</span>
         }
-        <span style={{marginLeft:"auto",fontSize:10,color:"#94A3B8",flexShrink:0}}>✏️</span>
+        <span style={{marginLeft:"auto",fontSize:10,color:"#94A3B8"}}>✏️</span>
       </div>
-      {open && ReactDOM.createPortal(
-        <div id="comment-portal" style={{
-          position:"fixed",top:pos.top,left:pos.left,zIndex:9999,
-          background:"#fff",borderRadius:16,width:320,
-          boxShadow:"0 20px 60px rgba(0,0,0,.22)",border:"1px solid #E2E8F0",overflow:"hidden",
-          animation:"popIn .15s cubic-bezier(.34,1.56,.64,1)"
-        }}>
-          <div style={{padding:"12px 16px 10px",background:"linear-gradient(135deg,#F8FAFC,#F1F5F9)",borderBottom:"1px solid #E2E8F0",display:"flex",alignItems:"center",gap:8}}>
-            <span style={{fontSize:16}}>💬</span>
-            <span style={{fontSize:13,fontWeight:800,color:"#1E293B"}}>Komentarz</span>
-            {draft && <span style={{marginLeft:"auto",fontSize:10,color:"#94A3B8",background:"#E2E8F0",padding:"1px 8px",borderRadius:20}}>{draft.length} zn.</span>}
-            <button onClick={cancel} style={{border:"none",background:"none",cursor:"pointer",color:"#94A3B8",fontSize:16,padding:0,marginLeft:draft?"2px":"auto"}}>✕</button>
+      {open && (
+        <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,zIndex:999,background:"#fff",
+          borderRadius:14,width:300,boxShadow:"0 16px 48px rgba(0,0,0,.2)",border:"1px solid #E2E8F0",overflow:"hidden"}}>
+          <div style={{padding:"10px 14px 8px",background:"#F8FAFC",borderBottom:"1px solid #E2E8F0",display:"flex",alignItems:"center",gap:8}}>
+            <span>💬</span><span style={{fontWeight:800,fontSize:13,color:"#1E293B"}}>Komentarz</span>
+            <button onClick={()=>setOpen(false)} style={{marginLeft:"auto",border:"none",background:"none",cursor:"pointer",color:"#94A3B8",fontSize:14}}>✕</button>
           </div>
-          <div style={{padding:"12px"}}>
-            <textarea ref={taRef} value={draft} onChange={function(e){setDraft(e.target.value);}}
-              onKeyDown={function(e){if(e.key==="Enter"&&e.ctrlKey)save();if(e.key==="Escape")cancel();}}
-              placeholder="Wpisz komentarz…" rows={5}
-              style={{width:"100%",border:"1.5px solid #E2E8F0",borderRadius:10,padding:"10px 12px",
-                fontSize:13,fontFamily:"inherit",resize:"vertical",color:"#1E293B",lineHeight:1.6,
-                minHeight:100,background:"#FAFBFF"}}
-              onFocus={function(e){e.currentTarget.style.borderColor="#3B82F6";}}
-              onBlur={function(e){e.currentTarget.style.borderColor="#E2E8F0";}}/>
+          <div style={{padding:"10px 12px"}}>
+            <textarea value={draft} onChange={e=>setDraft(e.target.value)}
+              onKeyDown={e=>{if(e.key==="Enter"&&e.ctrlKey)save();if(e.key==="Escape")setOpen(false);}}
+              placeholder="Wpisz komentarz… Ctrl+Enter = zapisz" rows={4}
+              style={{width:"100%",border:"1.5px solid #E2E8F0",borderRadius:8,padding:"8px 10px",
+                fontSize:13,fontFamily:"inherit",resize:"none",lineHeight:1.6,background:"#FAFBFF",boxSizing:"border-box"}}
+              onFocus={e=>e.currentTarget.style.borderColor="#3B82F6"}
+              onBlur={e=>e.currentTarget.style.borderColor="#E2E8F0"}/>
           </div>
-          <div style={{padding:"0 12px 10px",display:"flex",gap:6,flexWrap:"wrap"}}>
-            {["✅ OK","⚠️ Blokada","🔄 W trakcie","❌ Błąd","📋 Do weryfikacji","🚀 Gotowe"].map(function(tag){
-              return (
-                <div key={tag} onClick={function(){setDraft(function(d){return d?d+" "+tag:tag;});}}
-                  style={{padding:"3px 10px",borderRadius:20,background:"#F1F5F9",color:"#475569",fontSize:11,fontWeight:600,cursor:"pointer",border:"1px solid #E2E8F0"}}
-                  onMouseEnter={function(e){e.currentTarget.style.background="#EFF6FF";e.currentTarget.style.borderColor="#93C5FD";e.currentTarget.style.color="#1D4ED8";}}
-                  onMouseLeave={function(e){e.currentTarget.style.background="#F1F5F9";e.currentTarget.style.borderColor="#E2E8F0";e.currentTarget.style.color="#475569";}}>
-                  {tag}
-                </div>
-              );
-            })}
+          <div style={{padding:"0 12px 8px",display:"flex",gap:5,flexWrap:"wrap"}}>
+            {["✅ OK","⚠️ Blokada","🔄 W trakcie","❌ Błąd"].map(tag=>(
+              <div key={tag} onClick={()=>setDraft(d=>d?d+" "+tag:tag)}
+                style={{padding:"2px 8px",borderRadius:20,background:"#F1F5F9",color:"#475569",fontSize:11,fontWeight:600,cursor:"pointer",border:"1px solid #E2E8F0"}}>
+                {tag}
+              </div>
+            ))}
           </div>
-          <div style={{padding:"10px 12px 12px",display:"flex",gap:8,justifyContent:"flex-end",borderTop:"1px solid #F1F5F9"}}>
-            {draft && <button onClick={function(){setDraft("");}} style={{border:"none",background:"transparent",color:"#EF4444",fontSize:12,cursor:"pointer",padding:"7px 10px",borderRadius:8,fontFamily:"inherit",fontWeight:600}}>🗑 Usuń</button>}
-            <button onClick={cancel} style={{border:"1.5px solid #E2E8F0",background:"transparent",color:"#64748B",fontSize:12,cursor:"pointer",padding:"7px 16px",borderRadius:8,fontFamily:"inherit",fontWeight:600}}>Anuluj</button>
-            <button onClick={save} style={{border:"none",background:"linear-gradient(135deg,#1E293B,#0F172A)",color:"#fff",fontSize:12,cursor:"pointer",padding:"7px 18px",borderRadius:8,fontFamily:"inherit",fontWeight:700}}>💾 Zapisz</button>
+          <div style={{padding:"8px 12px 10px",display:"flex",gap:8,justifyContent:"flex-end",borderTop:"1px solid #F1F5F9"}}>
+            <button onClick={()=>setOpen(false)} style={{border:"1.5px solid #E2E8F0",background:"transparent",color:"#64748B",fontSize:12,cursor:"pointer",padding:"5px 12px",borderRadius:7,fontFamily:"inherit"}}>Anuluj</button>
+            <button onClick={save} style={{border:"none",background:"#0F172A",color:"#fff",fontSize:12,cursor:"pointer",padding:"5px 14px",borderRadius:7,fontFamily:"inherit",fontWeight:700}}>💾 Zapisz</button>
           </div>
-        </div>, document.body
+        </div>
       )}
     </div>
   );
 }
 
-// ── URL CELL ──────────────────────────────────────────────────────────────────
-function UrlCell(props) {
-  var value = props.value; var onChange = props.onChange;
-  var val = (value && typeof value==="object") ? value : {label:"",url:""};
-  var pair = useState(false); var open = pair[0]; var setOpen = pair[1];
-  var p2 = useState(val.label); var dLabel = p2[0]; var setDLabel = p2[1];
-  var p3 = useState(val.url); var dUrl = p3[0]; var setDUrl = p3[1];
-  var p4 = useState({top:0,left:0}); var pos = p4[0]; var setPos = p4[1];
-  var btnRef = useRef();
-  var openPanel = function() {
-    setDLabel(val.label); setDUrl(val.url);
-    if (btnRef.current) {
-      var r = btnRef.current.getBoundingClientRect();
-      setPos({top:r.bottom+6,left:Math.max(8,Math.min(r.left,window.innerWidth-330))});
-    }
-    setOpen(true);
-  };
-  var save = function(){onChange({label:dLabel,url:dUrl});setOpen(false);};
-  useEffect(function() {
-    var fn = function(e) {
-      var portal = document.getElementById("url-portal");
-      if (!(btnRef.current && btnRef.current.contains(e.target)) && !(portal && portal.contains(e.target))) setOpen(false);
-    };
-    if (open) document.addEventListener("mousedown", fn);
-    return function() { document.removeEventListener("mousedown", fn); };
-  }, [open]);
-  var isEmpty = !val.url;
+function CheckCell({value, onChange}) {
   return (
-    <div style={{userSelect:"none",minWidth:150}}>
-      <div ref={btnRef} style={{display:"flex",alignItems:"center",gap:6}}>
-        {!isEmpty
-          ? <a href={val.url} target="_blank" rel="noopener noreferrer"
-              style={{color:"#3B82F6",fontSize:12,fontWeight:600,textDecoration:"none",maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>
-              🔗 {val.label || val.url}
-            </a>
-          : <span style={{color:"#CBD5E1",fontSize:12,fontStyle:"italic"}}>+ Dodaj link…</span>
-        }
-        <button onClick={openPanel} style={{border:"none",background:"none",cursor:"pointer",color:"#94A3B8",fontSize:11,padding:"2px 4px",borderRadius:4,flexShrink:0}}
-          onMouseEnter={function(e){e.currentTarget.style.color="#3B82F6";}} onMouseLeave={function(e){e.currentTarget.style.color="#94A3B8";}}>✏️</button>
-      </div>
-      {open && ReactDOM.createPortal(
-        <div id="url-portal" style={{
-          position:"fixed",top:pos.top,left:pos.left,zIndex:9999,
-          background:"#fff",borderRadius:16,width:320,
-          boxShadow:"0 20px 60px rgba(0,0,0,.2)",border:"1px solid #E2E8F0",
-          animation:"popIn .15s cubic-bezier(.34,1.56,.64,1)"
-        }}>
-          <div style={{padding:"12px 16px 10px",background:"#F8FAFC",borderBottom:"1px solid #E2E8F0",display:"flex",alignItems:"center",gap:8}}>
-            <span style={{fontSize:16}}>🔗</span>
-            <span style={{fontSize:13,fontWeight:800,color:"#1E293B"}}>Dodaj link</span>
-            <button onClick={function(){setOpen(false);}} style={{marginLeft:"auto",border:"none",background:"none",cursor:"pointer",color:"#94A3B8",fontSize:16}}>✕</button>
-          </div>
-          <div style={{padding:"14px 16px",display:"flex",flexDirection:"column",gap:10}}>
-            <div>
-              <label style={{fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em",display:"block",marginBottom:5}}>Etykieta</label>
-              <input value={dLabel} onChange={function(e){setDLabel(e.target.value);}} placeholder="np. PROJ-101, Figma…"
-                style={{width:"100%",border:"1.5px solid #E2E8F0",borderRadius:8,padding:"8px 12px",fontSize:13,fontFamily:"inherit"}}
-                onFocus={function(e){e.currentTarget.style.borderColor="#3B82F6";}} onBlur={function(e){e.currentTarget.style.borderColor="#E2E8F0";}}/>
-            </div>
-            <div>
-              <label style={{fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em",display:"block",marginBottom:5}}>URL</label>
-              <input value={dUrl} onChange={function(e){setDUrl(e.target.value);}} placeholder="https://…"
-                style={{width:"100%",border:"1.5px solid #E2E8F0",borderRadius:8,padding:"8px 12px",fontSize:13,fontFamily:"inherit"}}
-                onFocus={function(e){e.currentTarget.style.borderColor="#3B82F6";}} onBlur={function(e){e.currentTarget.style.borderColor="#E2E8F0";}}
-                onKeyDown={function(e){if(e.key==="Enter")save();}}/>
-            </div>
-          </div>
-          <div style={{padding:"0 16px 14px",display:"flex",gap:8,justifyContent:"flex-end"}}>
-            {val.url && <button onClick={function(){onChange({label:"",url:""});setOpen(false);}} style={{border:"none",background:"transparent",color:"#EF4444",fontSize:12,cursor:"pointer",padding:"7px 10px",borderRadius:8,fontFamily:"inherit",fontWeight:600}}>🗑</button>}
-            <button onClick={function(){setOpen(false);}} style={{border:"1.5px solid #E2E8F0",background:"transparent",color:"#64748B",fontSize:12,cursor:"pointer",padding:"7px 14px",borderRadius:8,fontFamily:"inherit",fontWeight:600}}>Anuluj</button>
-            <button onClick={save} style={{border:"none",background:"linear-gradient(135deg,#1E293B,#0F172A)",color:"#fff",fontSize:12,cursor:"pointer",padding:"7px 18px",borderRadius:8,fontFamily:"inherit",fontWeight:700}}>💾 Zapisz</button>
-          </div>
-        </div>, document.body
-      )}
-    </div>
-  );
-}
-
-function CheckCell(props) {
-  var value = props.value; var onChange = props.onChange;
-  return (
-    <div onClick={function(){onChange(!value);}} style={{
-      width:28,height:28,borderRadius:8,cursor:"pointer",margin:"0 auto",
+    <div onClick={() => onChange(!value)} style={{
+      width:26,height:26,borderRadius:7,cursor:"pointer",margin:"0 auto",
       display:"flex",alignItems:"center",justifyContent:"center",
-      border:"2px solid "+(value?"#10B981":"#E2E8F0"),
-      background:value?"#D1FAE5":"#F8FAFC",transition:"all .18s",
-      boxShadow:value?"0 0 8px #10B98144":"none"
+      border:`2px solid ${value?"#10B981":"#E2E8F0"}`,background:value?"#D1FAE5":"#F8FAFC",transition:"all .15s"
     }}>
-      {value ? <span style={{color:"#065F46",fontSize:14,fontWeight:900}}>✓</span>
-             : <span style={{color:"#CBD5E1",fontSize:12}}>○</span>}
+      {value ? <span style={{color:"#065F46",fontSize:13,fontWeight:900}}>✓</span>
+             : <span style={{color:"#CBD5E1",fontSize:11}}>○</span>}
     </div>
   );
 }
 
-function ProgressBar(props) {
-  var value = props.value; var color = props.color || "#10B981";
+function ProgressBar({value, color="#10B981"}) {
   return (
     <div style={{height:5,background:"#F1F5F9",borderRadius:99,overflow:"hidden"}}>
-      <div style={{height:"100%",width:value+"%",background:color,borderRadius:99,transition:"width .6s"}}/>
+      <div style={{height:"100%",width:`${value}%`,background:color,borderRadius:99,transition:"width .6s"}}/>
     </div>
   );
 }
 
-// ── AI SMART PASTE MODAL ──────────────────────────────────────────────────────
-function SmartPasteModal(props) {
-  var columns = props.columns; var onImport = props.onImport; var onClose = props.onClose;
-  var p1 = useState(""); var text = p1[0]; var setText = p1[1];
-  var p2 = useState(null); var preview = p2[0]; var setPreview = p2[1];
-  var p3 = useState(false); var loading = p3[0]; var setLoading = p3[1];
-  var p4 = useState(""); var error = p4[0]; var setError = p4[1];
-  var p5 = useState("manual"); var mode = p5[0]; var setMode = p5[1];
-  var fileRef = useRef();
+// ── SMART PASTE MODAL ─────────────────────────────────────────────────────────
+function SmartPasteModal({columns, onImport, onClose}) {
+  const [text, setText] = useState("");
+  const [preview, setPreview] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState("ai");
+  const textCols = columns.filter(c => c.type==="text");
 
-  var textCols = columns.filter(function(c){return c.type==="text";});
-  var colNames = textCols.map(function(c){return c.name;}).join(", ");
-
-  var analyzeWithAI = async function() {
-    if (!text.trim()) return;
-    setLoading(true); setError(""); setPreview(null);
-    try {
-      var prompt = "Masz tekst z listą funkcjonalności/zadań do zaimportowania do trackera. Kolumny w tabeli: "+colNames+".\n\nZParsuj poniższy tekst i zwróć JSON array obiektów gdzie klucze to nazwy kolumn. Każdy obiekt = jeden wiersz. Pierwsze pole to nazwa/tytuł, drugie pole to opis jeśli istnieje.\n\nOdpowiedz TYLKO czystym JSON bez żadnego markdown ani backticks.\n\nTEKST DO PARSOWANIA:\n"+text;
-      var response = await fetch(ANTHROPIC_API, {
-        method:"POST",
-        headers:{"Content-Type":"application/json","anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-        body: JSON.stringify({
-          model:"claude-sonnet-4-20250514",
-          max_tokens:1000,
-          messages:[{role:"user",content:prompt}]
-        })
-      });
-      var data = await response.json();
-      var rawText = data.content && data.content[0] && data.content[0].text ? data.content[0].text : "";
-      var clean = rawText.replace(/```json/g,"").replace(/```/g,"").trim();
-      var parsed = JSON.parse(clean);
-      if (Array.isArray(parsed)) setPreview(parsed);
-      else setError("AI nie zwróciło poprawnego formatu — spróbuj jeszcze raz.");
-    } catch(e) {
-      setError("Błąd AI: "+e.message+". Spróbuj trybu Ręcznego.");
-    }
-    setLoading(false);
-  };
-
-  var parseManual = function() {
-    var lines = text.trim().split("\n").filter(function(l){return l.trim();});
-    var rows = lines.map(function(line) {
-      var clean = line.replace(/^[\s\-\*\•\d\.\)\|]+/,"").trim();
-      var parts = clean.split(/\s*[\|\t\-–—]\s*/);
-      var obj = {};
-      textCols.forEach(function(col,i) { obj[col.name] = parts[i] ? parts[i].trim() : ""; });
+  const parseManual = () => {
+    const lines = text.trim().split("\n").filter(l=>l.trim());
+    const rows = lines.map(line => {
+      const clean = line.replace(/^[\s\-\*\•\d\.\)\|]+/,"").trim();
+      const parts = clean.split(/\s*[\|\t]\s*/);
+      const obj = {};
+      textCols.forEach((col,i) => { obj[col.name] = (parts[i]||"").trim(); });
       return obj;
-    }).filter(function(r) {
-      return Object.values(r).some(function(v){return v && v.trim();});
-    });
+    }).filter(r => Object.values(r).some(v=>v&&v.trim()));
     setPreview(rows);
   };
 
-  var handleFile = function(file) {
-    var reader = new FileReader();
-    reader.onload = function(e) {
-      setText(e.target.result);
-    };
-    reader.readAsText(file);
+  const analyzeWithAI = async () => {
+    setLoading(true);
+    try {
+      const colNames = textCols.map(c=>c.name).join(", ");
+      const prompt = `Masz tekst z listą funkcjonalności/zadań. Kolumny: ${colNames}.\nZparsuj poniższy tekst i zwróć JSON array obiektów gdzie klucze to nazwy kolumn. Odpowiedz TYLKO czystym JSON.\n\nTEKST:\n${text}`;
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST",
+        headers:{"Content-Type":"application/json","anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+        body: JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:prompt}]})
+      });
+      const data = await resp.json();
+      const raw = data.content?.[0]?.text||"";
+      const clean = raw.replace(/```json|```/g,"").trim();
+      const parsed = JSON.parse(clean);
+      if (Array.isArray(parsed)) setPreview(parsed);
+    } catch(e) { parseManual(); }
+    setLoading(false);
   };
 
-  var doImport = function() {
-    if (!preview || !preview.length) return;
-    var newRows = preview.map(function(obj) {
-      var row = {id:mkId()};
-      columns.forEach(function(col) {
+  const doImport = () => {
+    if (!preview?.length) return;
+    const newRows = preview.map(obj => {
+      const row = {id:mkId()};
+      columns.forEach(col => {
         if(col.type==="checkbox") row[col.id]=false;
         else if(col.type==="test") row[col.id]=emptyTest();
-        else if(col.type==="url") row[col.id]={label:"",url:""};
-        else if(col.type==="status") row[col.id]=(col.options&&col.options[1]&&col.options[1].label)||"Nie rozpoczęte";
+        else if(col.type==="status") row[col.id]=(col.options?.[1]?.label)||"Nie rozpoczęte";
         else row[col.id]="";
       });
-      textCols.forEach(function(col) {
-        var val = obj[col.name] || obj[col.name.toLowerCase()] || "";
-        if (val) row[col.id] = val;
+      textCols.forEach(col => {
+        const val = obj[col.name]||obj[col.name.toLowerCase()]||"";
+        if(val) row[col.id]=val;
       });
-      if (!row[textCols[0] && textCols[0].id]) {
-        var keys = Object.keys(obj);
-        if (keys.length > 0 && textCols[0]) row[textCols[0].id] = obj[keys[0]] || "";
-        if (keys.length > 1 && textCols[1]) row[textCols[1].id] = obj[keys[1]] || "";
+      if (!row[textCols[0]?.id]) {
+        const keys = Object.keys(obj);
+        if(keys[0] && textCols[0]) row[textCols[0].id]=obj[keys[0]]||"";
+        if(keys[1] && textCols[1]) row[textCols[1].id]=obj[keys[1]]||"";
       }
       return row;
     });
     onImport(newRows);
   };
 
-  return ReactDOM.createPortal(
-    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.75)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(5px)"}}
-      onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
-      <div style={{background:"#fff",borderRadius:24,width:680,maxWidth:"calc(100vw - 32px)",maxHeight:"88vh",overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:"0 30px 80px rgba(0,0,0,.35)",animation:"popIn .2s"}}>
-
-        {/* Header */}
-        <div style={{padding:"22px 28px 0",background:"linear-gradient(135deg,#0F172A,#1E293B)",flexShrink:0}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.75)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center"}}
+      onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div style={{background:"#fff",borderRadius:20,width:620,maxWidth:"calc(100vw - 32px)",maxHeight:"85vh",overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:"0 30px 80px rgba(0,0,0,.35)"}}>
+        <div style={{padding:"20px 24px 0",background:"linear-gradient(135deg,#0F172A,#1E293B)",flexShrink:0}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
             <div>
-              <h3 style={{fontSize:20,fontWeight:900,color:"#fff",margin:0}}>📋 Import danych</h3>
-              <div style={{color:"#64748B",fontSize:12,marginTop:4}}>Wklej tekst z ChatGPT, Notepada, Excela lub wgraj plik</div>
+              <h3 style={{fontSize:18,fontWeight:900,color:"#fff",margin:0}}>📋 Import danych</h3>
+              <div style={{color:"#64748B",fontSize:12,marginTop:3}}>Wklej tekst z ChatGPT, Notepada, Excela lub wgraj plik</div>
             </div>
-            <button onClick={onClose} style={{border:"none",background:"rgba(255,255,255,.1)",color:"#fff",width:32,height:32,borderRadius:8,cursor:"pointer",fontSize:16}}>✕</button>
+            <button onClick={onClose} style={{border:"none",background:"rgba(255,255,255,.1)",color:"#fff",width:30,height:30,borderRadius:7,cursor:"pointer",fontSize:15}}>✕</button>
           </div>
-          <div style={{display:"flex",gap:2,paddingBottom:0}}>
-            {[{id:"ai",icon:"✨",label:"Smart AI Paste"},{id:"manual",icon:"📊",label:"Ręczny / Excel / Plik"}].map(function(tab){
-              var isA = mode===tab.id;
-              return (
-                <div key={tab.id} onClick={function(){setMode(tab.id);setPreview(null);setError("");}}
-                  style={{padding:"10px 18px",cursor:"pointer",fontSize:13,fontWeight:700,
-                    color:isA?"#fff":"#64748B",
-                    background:isA?"rgba(255,255,255,.08)":"transparent",
-                    borderRadius:"10px 10px 0 0",
-                    borderBottom:isA?"3px solid #60A5FA":"3px solid transparent",
-                    display:"flex",alignItems:"center",gap:7,transition:"all .15s"}}>
-                  <span>{tab.icon}</span><span>{tab.label}</span>
-                </div>
-              );
-            })}
+          <div style={{display:"flex",gap:2}}>
+            {[{id:"ai",icon:"✨",label:"Smart AI Paste"},{id:"manual",icon:"📊",label:"Ręczny / Plik"}].map(tab=>(
+              <div key={tab.id} onClick={()=>{setMode(tab.id);setPreview(null);}}
+                style={{padding:"8px 16px",cursor:"pointer",fontSize:13,fontWeight:700,color:mode===tab.id?"#fff":"#64748B",
+                  background:mode===tab.id?"rgba(255,255,255,.08)":"transparent",
+                  borderRadius:"8px 8px 0 0",borderBottom:mode===tab.id?"3px solid #60A5FA":"3px solid transparent",
+                  display:"flex",alignItems:"center",gap:6}}>
+                {tab.icon} {tab.label}
+              </div>
+            ))}
           </div>
         </div>
-
-        <div style={{flex:1,overflowY:"auto",padding:"24px 28px"}}>
-
-          {/* ✨ AI MODE */}
+        <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
           {mode==="ai" && (
             <div>
-              <div style={{padding:"12px 16px",background:"linear-gradient(135deg,#EFF6FF,#F0FDF4)",borderRadius:12,border:"1px solid #BFDBFE",marginBottom:16,fontSize:13,color:"#1E3A8A",display:"flex",gap:10,alignItems:"flex-start"}}>
-                <span style={{fontSize:20,flexShrink:0}}>✨</span>
-                <div>
-                  <strong>Jak to działa:</strong> Wklej dowolny tekst — listę punktowaną, tabelę, wynik ChatGPT, notatki. AI automatycznie rozpozna strukturę i dopasuje do kolumn: <strong>{colNames}</strong>.
-                </div>
+              <div style={{padding:"10px 14px",background:"#EFF6FF",borderRadius:10,border:"1px solid #BFDBFE",marginBottom:14,fontSize:13,color:"#1E3A8A",display:"flex",gap:10}}>
+                <span style={{fontSize:18,flexShrink:0}}>✨</span>
+                <div>Wklej dowolny tekst — listę, tabelę, wynik ChatGPT. AI automatycznie rozpozna strukturę i dopasuje do kolumn: <strong>{textCols.map(c=>c.name).join(", ")}</strong></div>
               </div>
-              <label style={{display:"block",fontSize:11,fontWeight:800,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Wklej tekst tutaj (Ctrl+V)</label>
-              <textarea value={text} onChange={function(e){setText(e.target.value);setPreview(null);}}
-                placeholder={"Przykłady co możesz wkleić:\n\n• Logowanie - Sprawdzenie logowania i komunikatów błędu\n• Rejestracja - Walidacja pól formularza\n\nLub tabela z ChatGPT:\nFunkcjonalność | Opis\nLogowanie | Sprawdzenie...\n\nLub zwykła lista:\n1. Logowanie\n2. Rejestracja\n3. Koszyk"}
-                rows={9}
-                style={{width:"100%",border:"1.5px solid #E2E8F0",borderRadius:12,padding:"14px",fontSize:13,fontFamily:"inherit",resize:"vertical",lineHeight:1.7,background:"#FAFBFF",color:"#1E293B"}}
-                onFocus={function(e){e.currentTarget.style.borderColor="#60A5FA";}}
-                onBlur={function(e){e.currentTarget.style.borderColor="#E2E8F0";}}/>
-              {error && <div style={{padding:"10px 14px",background:"#FEE2E2",borderRadius:10,color:"#991B1B",fontSize:12,marginTop:10,border:"1px solid #FCA5A5"}}>{error}</div>}
-              {preview && (
-                <div style={{marginTop:16}}>
-                  <div style={{padding:"8px 12px",background:"#D1FAE5",borderRadius:8,color:"#065F46",fontSize:12,fontWeight:700,marginBottom:10,border:"1px solid #6EE7B7"}}>
-                    ✅ AI znalazł {preview.length} wierszy — sprawdź podgląd poniżej
-                  </div>
-                  <div style={{borderRadius:10,overflow:"hidden",border:"1px solid #E2E8F0",fontSize:12,maxHeight:200,overflowY:"auto"}}>
-                    <table style={{width:"100%",borderCollapse:"collapse"}}>
-                      <thead>
-                        <tr style={{background:"#F8FAFC"}}>
-                          {preview[0] && Object.keys(preview[0]).map(function(k){return <th key={k} style={{padding:"7px 10px",textAlign:"left",fontWeight:700,color:"#64748B",fontSize:11,borderBottom:"1px solid #E2E8F0"}}>{k}</th>;})}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {preview.slice(0,5).map(function(row,ri){
-                          return (
-                            <tr key={ri} style={{borderBottom:"1px solid #F1F5F9"}}>
-                              {Object.values(row).map(function(cell,ci){return <td key={ci} style={{padding:"7px 10px",color:"#334155"}}>{String(cell||"")}</td>;})}
-                            </tr>
-                          );
-                        })}
-                        {preview.length>5 && <tr><td colSpan={99} style={{padding:"7px 10px",color:"#94A3B8",fontStyle:"italic",textAlign:"center"}}>...i jeszcze {preview.length-5} wierszy</td></tr>}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
+              <textarea value={text} onChange={e=>{setText(e.target.value);setPreview(null);}}
+                placeholder={"Przykłady:\n\n• Logowanie - Sprawdzenie logowania i komunikatów błędu\n• Rejestracja - Walidacja pól formularza\n\nLub tabela:\nFunkcjonalność | Opis\nLogowanie | Sprawdzenie...\n\nLub lista:\n1. Logowanie\n2. Rejestracja"}
+                rows={8} style={{width:"100%",border:"1.5px solid #E2E8F0",borderRadius:10,padding:"12px",fontSize:13,fontFamily:"inherit",resize:"vertical",lineHeight:1.7,background:"#FAFBFF",boxSizing:"border-box"}}
+                onFocus={e=>e.currentTarget.style.borderColor="#60A5FA"}
+                onBlur={e=>e.currentTarget.style.borderColor="#E2E8F0"}/>
             </div>
           )}
-
-          {/* 📊 MANUAL MODE */}
           {mode==="manual" && (
             <div>
-              <div style={{border:"2px dashed #E2E8F0",borderRadius:16,padding:"20px",marginBottom:16,
-                background:"#FAFBFF",cursor:"pointer",textAlign:"center",transition:"all .15s"}}
-                onClick={function(){if(fileRef.current)fileRef.current.click();}}
-                onDragOver={function(e){e.preventDefault();e.currentTarget.style.borderColor="#3B82F6";e.currentTarget.style.background="#EFF6FF";}}
-                onDragLeave={function(e){e.currentTarget.style.borderColor="#E2E8F0";e.currentTarget.style.background="#FAFBFF";}}
-                onDrop={function(e){
-                  e.preventDefault();
-                  e.currentTarget.style.borderColor="#E2E8F0";e.currentTarget.style.background="#FAFBFF";
-                  var file = e.dataTransfer.files[0];
-                  if(file) handleFile(file);
-                }}>
-                <div style={{fontSize:32,marginBottom:8}}>📂</div>
-                <div style={{fontSize:14,fontWeight:700,color:"#1E293B",marginBottom:4}}>Przeciągnij plik CSV / TSV</div>
-                <div style={{fontSize:12,color:"#94A3B8"}}>lub kliknij aby wybrać</div>
-                <input ref={fileRef} type="file" accept=".csv,.tsv,.txt" style={{display:"none"}}
-                  onChange={function(e){if(e.target.files[0])handleFile(e.target.files[0]);}}/>
-              </div>
-              <div style={{position:"relative",marginBottom:16,textAlign:"center"}}>
-                <div style={{height:1,background:"#E2E8F0",position:"absolute",top:"50%",left:0,right:0}}/>
-                <span style={{position:"relative",background:"#fff",padding:"0 12px",fontSize:11,color:"#94A3B8",fontWeight:700,textTransform:"uppercase"}}>lub wklej ręcznie</span>
-              </div>
               <div style={{padding:"10px 14px",background:"#FEF9C3",borderRadius:10,border:"1px solid #FDE047",marginBottom:12,fontSize:12,color:"#854D0E"}}>
-                💡 Możesz wkleić komórki z <strong>Excel / Google Sheets</strong> (Ctrl+C w tabeli → Ctrl+V tutaj). Separatory Tab i Średnik są obsługiwane.
+                💡 Wklej komórki z <strong>Excel / Google Sheets</strong> (Ctrl+C w tabeli → Ctrl+V tutaj). Separator Tab jest obsługiwany automatycznie.
               </div>
-              <textarea value={text} onChange={function(e){setText(e.target.value);setPreview(null);}}
-                placeholder={"Wklej z Excela / Google Sheets:\nFunkcjonalność\tOpis\nLogowanie\tSprawdzenie logowania\n\nLub lista:\nLogowanie\tSprawdzenie\nRejestracja\tWalidacja"}
-                rows={8} style={{width:"100%",border:"1.5px solid #E2E8F0",borderRadius:12,padding:"12px 14px",
-                  fontSize:12,fontFamily:"'Courier New',monospace",resize:"vertical",lineHeight:1.6,background:"#FAFBFF"}}
-                onFocus={function(e){e.currentTarget.style.borderColor="#3B82F6";}}
-                onBlur={function(e){e.currentTarget.style.borderColor="#E2E8F0";}}/>
-              {preview && (
-                <div style={{marginTop:12,padding:"8px 12px",background:"#D1FAE5",borderRadius:8,color:"#065F46",fontSize:12,fontWeight:700,border:"1px solid #6EE7B7"}}>
-                  ✅ Znaleziono {preview.length} wierszy — gotowe do importu
-                </div>
-              )}
+              <textarea value={text} onChange={e=>{setText(e.target.value);setPreview(null);}}
+                placeholder={"Wklej z Excela:\nFunkcjonalność\tOpis\nLogowanie\tSprawdzenie logowania\nRejestracja\tWalidacja pól"}
+                rows={8} style={{width:"100%",border:"1.5px solid #E2E8F0",borderRadius:10,padding:"12px",fontSize:12,fontFamily:"monospace",resize:"vertical",lineHeight:1.6,background:"#FAFBFF",boxSizing:"border-box"}}
+                onFocus={e=>e.currentTarget.style.borderColor="#3B82F6"}
+                onBlur={e=>e.currentTarget.style.borderColor="#E2E8F0"}/>
+            </div>
+          )}
+          {preview && (
+            <div style={{marginTop:14}}>
+              <div style={{padding:"7px 12px",background:"#D1FAE5",borderRadius:8,color:"#065F46",fontSize:12,fontWeight:700,marginBottom:10,border:"1px solid #6EE7B7"}}>
+                ✅ Znaleziono {preview.length} wierszy — gotowe do importu
+              </div>
+              <div style={{borderRadius:10,overflow:"hidden",border:"1px solid #E2E8F0",fontSize:12,maxHeight:160,overflowY:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse"}}>
+                  <thead><tr style={{background:"#F8FAFC"}}>
+                    {preview[0]&&Object.keys(preview[0]).map(k=><th key={k} style={{padding:"6px 10px",textAlign:"left",fontWeight:700,color:"#64748B",fontSize:11,borderBottom:"1px solid #E2E8F0"}}>{k}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {preview.slice(0,4).map((row,i)=>(
+                      <tr key={i} style={{borderBottom:"1px solid #F1F5F9"}}>
+                        {Object.values(row).map((v,j)=><td key={j} style={{padding:"6px 10px",color:"#334155"}}>{String(v||"")}</td>)}
+                      </tr>
+                    ))}
+                    {preview.length>4&&<tr><td colSpan={99} style={{padding:"6px 10px",color:"#94A3B8",fontStyle:"italic"}}>...i {preview.length-4} więcej</td></tr>}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
-
-        {/* Footer */}
-        <div style={{padding:"16px 28px",borderTop:"1px solid #F1F5F9",display:"flex",gap:10,justifyContent:"space-between",flexShrink:0,background:"#FAFBFF"}}>
-          <button onClick={onClose} style={{border:"1.5px solid #E2E8F0",background:"transparent",color:"#64748B",padding:"10px 20px",borderRadius:10,cursor:"pointer",fontFamily:"inherit",fontWeight:600,fontSize:14}}>Anuluj</button>
-          <div style={{display:"flex",gap:10}}>
-            {mode==="ai" && !preview && (
+        <div style={{padding:"14px 24px",borderTop:"1px solid #F1F5F9",display:"flex",justifyContent:"space-between",flexShrink:0,background:"#FAFBFF"}}>
+          <button onClick={onClose} style={{border:"1.5px solid #E2E8F0",background:"transparent",color:"#64748B",padding:"9px 18px",borderRadius:9,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>Anuluj</button>
+          <div style={{display:"flex",gap:8}}>
+            {!preview && mode==="ai" && (
               <button onClick={analyzeWithAI} disabled={!text.trim()||loading}
-                style={{border:"none",background:loading?"#94A3B8":"linear-gradient(135deg,#6366F1,#4F46E5)",color:"#fff",padding:"10px 24px",borderRadius:10,cursor:loading?"not-allowed":"pointer",fontFamily:"inherit",fontWeight:700,fontSize:14,display:"flex",alignItems:"center",gap:8,opacity:!text.trim()?0.5:1}}>
-                {loading
-                  ? <span style={{animation:"spin 1s linear infinite",display:"inline-block"}}>⚙️</span>
-                  : <span>✨</span>
-                }
-                {loading ? "AI analizuje…" : "Analizuj z AI"}
+                style={{border:"none",background:loading?"#94A3B8":"linear-gradient(135deg,#6366F1,#4F46E5)",color:"#fff",padding:"9px 22px",borderRadius:9,cursor:"pointer",fontFamily:"inherit",fontWeight:700,fontSize:14,opacity:!text.trim()?0.5:1,display:"flex",alignItems:"center",gap:7}}>
+                <span style={{display:"inline-block",animation:loading?"spin 1s linear infinite":"none"}}>✨</span>
+                {loading?"AI analizuje…":"Analizuj z AI"}
               </button>
             )}
-            {mode==="manual" && !preview && (
+            {!preview && mode==="manual" && (
               <button onClick={parseManual} disabled={!text.trim()}
-                style={{border:"none",background:"linear-gradient(135deg,#1E293B,#0F172A)",color:"#fff",padding:"10px 24px",borderRadius:10,cursor:"pointer",fontFamily:"inherit",fontWeight:700,fontSize:14,opacity:!text.trim()?0.5:1}}>
+                style={{border:"none",background:"#0F172A",color:"#fff",padding:"9px 22px",borderRadius:9,cursor:"pointer",fontFamily:"inherit",fontWeight:700,opacity:!text.trim()?0.5:1}}>
                 Parsuj →
               </button>
             )}
             {preview && (
               <button onClick={doImport}
-                style={{border:"none",background:"linear-gradient(135deg,#10B981,#059669)",color:"#fff",padding:"10px 28px",borderRadius:10,cursor:"pointer",fontFamily:"inherit",fontWeight:700,fontSize:14,boxShadow:"0 4px 12px #10B98144"}}>
+                style={{border:"none",background:"linear-gradient(135deg,#10B981,#059669)",color:"#fff",padding:"9px 24px",borderRadius:9,cursor:"pointer",fontFamily:"inherit",fontWeight:700,fontSize:14}}>
                 ✅ Importuj {preview.length} wierszy
               </button>
             )}
           </div>
         </div>
       </div>
-    </div>, document.body
-  );
-}
-
-// ── ROW DETAIL PANEL ──────────────────────────────────────────────────────────
-function RowDetailPanel(props) {
-  var row = props.row; var columns = props.columns; var onClose = props.onClose; var onUpdate = props.onUpdate;
-  var pair = useState(Object.assign({},row)); var draft = pair[0]; var setDraft = pair[1];
-  var save = function(){onUpdate(draft);onClose();};
-  var updateField = function(colId,val){setDraft(function(d){return Object.assign({},d,{[colId]:val});});};
-  return ReactDOM.createPortal(
-    <div style={{position:"fixed",inset:0,zIndex:8888,display:"flex"}}>
-      <div onClick={onClose} style={{flex:1,background:"rgba(15,23,42,.4)",backdropFilter:"blur(3px)"}}/>
-      <div style={{width:480,maxWidth:"90vw",background:"#fff",height:"100vh",overflowY:"auto",
-        boxShadow:"-20px 0 60px rgba(0,0,0,.2)",animation:"slideRight .2s ease",display:"flex",flexDirection:"column"}}>
-        <div style={{padding:"20px 24px 16px",background:"linear-gradient(135deg,#0F172A,#1E293B)",color:"#fff",flexShrink:0}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div>
-              <div style={{fontSize:11,color:"#64748B",fontWeight:700,textTransform:"uppercase",letterSpacing:".07em",marginBottom:4}}>Szczegóły wiersza</div>
-              <div style={{fontSize:16,fontWeight:800,color:"#fff"}}>{(columns[0] && draft[columns[0].id])||"Wiersz"}</div>
-            </div>
-            <button onClick={onClose} style={{border:"none",background:"rgba(255,255,255,.1)",color:"#fff",width:32,height:32,borderRadius:8,cursor:"pointer",fontSize:16}}>✕</button>
-          </div>
-        </div>
-        <div style={{flex:1,padding:"20px 24px",display:"flex",flexDirection:"column",gap:16}}>
-          {columns.map(function(col) {
-            return (
-              <div key={col.id}>
-                <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:800,color:"#64748B",textTransform:"uppercase",letterSpacing:".07em",marginBottom:8}}>
-                  {col.type==="status"?"🎯":col.type==="test"?"🧪":col.type==="checkbox"?"☑️":col.type==="url"?"🔗":col.comment?"💬":"✏️"} {col.name}
-                </label>
-                {col.type==="status" ? (
-                  <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                    {(col.options||STATUS_OPTS).map(function(o){
-                      return (
-                        <div key={o.label} onClick={function(){updateField(col.id,o.label);}}
-                          style={{padding:"6px 14px",borderRadius:20,cursor:"pointer",fontSize:12,fontWeight:700,
-                            background:o.bg,border:"2px solid "+(draft[col.id]===o.label?o.dot:o.border),color:o.color,
-                            boxShadow:draft[col.id]===o.label?"0 0 0 3px "+o.dot+"28":"none",transition:"all .15s"}}>
-                          {o.label} {draft[col.id]===o.label&&"✓"}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : col.type==="test" ? (
-                  <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                    {TEST_STATES.map(function(t){
-                      var curState = (draft[col.id] && draft[col.id].state) || "untested";
-                      return (
-                        <div key={t.key} onClick={function(){updateField(col.id,Object.assign({},draft[col.id]||emptyTest(),{state:t.key}));}}
-                          style={{display:"flex",alignItems:"center",gap:8,padding:"6px 14px",borderRadius:20,cursor:"pointer",
-                            background:t.bg,border:"2px solid "+(curState===t.key?t.dot:t.border),
-                            boxShadow:curState===t.key?"0 0 0 3px "+t.dot+"28":"none",transition:"all .15s"}}>
-                          <span style={{color:t.dot,fontWeight:900}}>{t.icon}</span>
-                          <span style={{color:t.color,fontWeight:700,fontSize:12}}>{t.label}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : col.type==="checkbox" ? (
-                  <div style={{display:"flex",alignItems:"center",gap:10}}>
-                    <CheckCell value={!!draft[col.id]} onChange={function(v){updateField(col.id,v);}}/>
-                    <span style={{fontSize:13,color:"#64748B"}}>{draft[col.id]?"Zaznaczone":"Niezaznaczone"}</span>
-                  </div>
-                ) : (
-                  <textarea value={draft[col.id]||""} onChange={function(e){updateField(col.id,e.target.value);}}
-                    rows={col.comment?4:2} placeholder={"Wpisz "+col.name.toLowerCase()+"…"}
-                    style={{width:"100%",border:"1.5px solid #E2E8F0",borderRadius:10,padding:"10px 12px",
-                      fontSize:13,fontFamily:"inherit",resize:"vertical",lineHeight:1.6,color:"#1E293B",
-                      background:"#FAFBFF",minHeight:col.comment?80:44}}
-                    onFocus={function(e){e.currentTarget.style.borderColor="#3B82F6";}}
-                    onBlur={function(e){e.currentTarget.style.borderColor="#E2E8F0";}}/>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        <div style={{padding:"16px 24px",borderTop:"1px solid #F1F5F9",display:"flex",gap:10,justifyContent:"flex-end",flexShrink:0}}>
-          <button onClick={onClose} style={{border:"1.5px solid #E2E8F0",background:"transparent",color:"#64748B",padding:"10px 20px",borderRadius:10,cursor:"pointer",fontFamily:"inherit",fontWeight:600,fontSize:14}}>Anuluj</button>
-          <button onClick={save} style={{border:"none",background:"linear-gradient(135deg,#1E293B,#0F172A)",color:"#fff",padding:"10px 24px",borderRadius:10,cursor:"pointer",fontFamily:"inherit",fontWeight:700,fontSize:14,boxShadow:"0 4px 12px rgba(0,0,0,.2)"}}>💾 Zapisz</button>
-        </div>
-      </div>
-    </div>, document.body
-  );
-}
-
-// ── COLUMN MODAL ──────────────────────────────────────────────────────────────
-function ColumnModal(props) {
-  var col = props.col; var onSave = props.onSave; var onClose = props.onClose;
-  var isNew = !col.id;
-  var p1 = useState(col.name||""); var name = p1[0]; var setName = p1[1];
-  var p2 = useState(col.type||"text"); var type = p2[0]; var setType = p2[1];
-  var p3 = useState(!!col.comment); var isComment = p3[0]; var setIsComment = p3[1];
-  var p4 = useState(col.type==="status"?(col.options||[]):[
-    Object.assign({label:"Opcja 1"},PALETTE[0]),
-    Object.assign({label:"Opcja 2"},PALETTE[1])
-  ]); var statusOpts = p4[0]; var setStatusOpts = p4[1];
-
-  var addOpt = function(){setStatusOpts(function(o){return [...o,Object.assign({label:"Nowa opcja"},PALETTE[o.length%PALETTE.length])];});};
-  var removeOpt = function(i){setStatusOpts(function(o){return o.filter(function(_,idx){return idx!==i;});});};
-  var save = function() {
-    if (!name.trim()) return;
-    var base = {id:col.id||mkId(),name:name.trim(),type:type};
-    if (type==="status") {onSave(Object.assign({},base,{options:statusOpts.filter(function(o){return o.label.trim();})}));return;}
-    if (type==="text" && isComment) {onSave(Object.assign({},base,{comment:true}));return;}
-    onSave(base);
-  };
-  var TYPES = [
-    {val:"text",icon:"✏️",label:"Tekst"},{val:"status",icon:"🎯",label:"Status"},
-    {val:"test",icon:"🧪",label:"Testy"},{val:"url",icon:"🔗",label:"Link"},
-    {val:"checkbox",icon:"☑️",label:"Checkbox"},{val:"number",icon:"🔢",label:"Liczba"},
-  ];
-  return (
-    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.6)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)"}}
-      onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
-      <div style={{background:"#fff",borderRadius:20,padding:32,width:480,maxWidth:"calc(100vw - 32px)",maxHeight:"85vh",overflowY:"auto",boxShadow:"0 30px 80px rgba(0,0,0,.3)",animation:"popIn .2s"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
-          <h3 style={{fontSize:20,fontWeight:800,color:"#0F172A"}}>{isNew?"➕ Nowa kolumna":"✏️ Edytuj kolumnę"}</h3>
-          <button onClick={onClose} style={{border:"none",background:"#F1F5F9",fontSize:16,cursor:"pointer",color:"#64748B",width:32,height:32,borderRadius:8}}>✕</button>
-        </div>
-        <div style={{marginBottom:18}}>
-          <label style={{display:"block",fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Nazwa kolumny</label>
-          <input value={name} onChange={function(e){setName(e.target.value);}} placeholder="np. Priorytet, Assignee…"
-            style={{width:"100%",border:"1.5px solid #E2E8F0",borderRadius:10,padding:"10px 14px",fontSize:14,fontFamily:"inherit"}}
-            onFocus={function(e){e.currentTarget.style.borderColor="#3B82F6";}} onBlur={function(e){e.currentTarget.style.borderColor="#E2E8F0";}}/>
-        </div>
-        <div style={{marginBottom:20}}>
-          <label style={{display:"block",fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em",marginBottom:10}}>Typ pola</label>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            {TYPES.map(function(t){
-              return (
-                <div key={t.val} onClick={function(){setType(t.val);}} style={{
-                  padding:"8px 14px",borderRadius:20,cursor:"pointer",fontSize:13,fontWeight:600,
-                  background:type===t.val?"#0F172A":"#F8FAFC",color:type===t.val?"#fff":"#64748B",
-                  border:"2px solid "+(type===t.val?"#0F172A":"#E2E8F0"),transition:"all .15s"
-                }}>{t.icon} {t.label}</div>
-              );
-            })}
-          </div>
-        </div>
-        {type==="text" && (
-          <div onClick={function(){setIsComment(!isComment);}} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:"#F8FAFC",borderRadius:10,border:"1.5px solid "+(isComment?"#3B82F6":"#E2E8F0"),cursor:"pointer",marginBottom:16}}>
-            <input type="checkbox" checked={isComment} readOnly style={{width:16,height:16,accentColor:"#3B82F6"}}/>
-            <div><div style={{fontSize:13,fontWeight:700,color:"#1E293B"}}>💬 Pole komentarzowe</div><div style={{fontSize:11,color:"#64748B",marginTop:2}}>Otwiera panel z dużym polem tekstowym</div></div>
-          </div>
-        )}
-        {type==="status" && (
-          <div style={{marginBottom:18}}>
-            <label style={{display:"block",fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em",marginBottom:10}}>Opcje statusu</label>
-            {statusOpts.map(function(o,i){
-              return (
-                <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                  <div style={{display:"flex",gap:4,flexShrink:0}}>
-                    {PALETTE.map(function(p,pi){
-                      return <div key={pi} onClick={function(){setStatusOpts(function(opts){return opts.map(function(x,idx){return idx===i?Object.assign({},x,p):x;});});}} style={{width:16,height:16,borderRadius:"50%",background:p.dot,cursor:"pointer",border:o.dot===p.dot?"2.5px solid #0F172A":"2px solid transparent",transform:o.dot===p.dot?"scale(1.25)":"scale(1)",transition:"transform .1s"}}/>;
-                    })}
-                  </div>
-                  <div style={{flex:1,padding:"5px 12px",borderRadius:20,background:o.bg,border:"1.5px solid "+o.dot+"55"}}>
-                    <input value={o.label} onChange={function(e){var v=e.target.value;setStatusOpts(function(opts){return opts.map(function(x,idx){return idx===i?Object.assign({},x,{label:v}):x;});});}} style={{border:"none",background:"transparent",width:"100%",color:o.color,fontWeight:700,fontSize:12,fontFamily:"inherit"}}/>
-                  </div>
-                  <button onClick={function(){removeOpt(i);}} style={{border:"none",background:"none",cursor:"pointer",color:"#CBD5E1",fontSize:15}} onMouseEnter={function(e){e.currentTarget.style.color="#EF4444";}} onMouseLeave={function(e){e.currentTarget.style.color="#CBD5E1";}}>✕</button>
-                </div>
-              );
-            })}
-            <button onClick={addOpt} style={{border:"1.5px dashed #CBD5E1",background:"transparent",color:"#64748B",padding:"5px 14px",borderRadius:8,cursor:"pointer",fontSize:12,marginTop:4}}>+ Dodaj opcję</button>
-          </div>
-        )}
-        <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:8}}>
-          <button onClick={onClose} style={{border:"1.5px solid #E2E8F0",background:"transparent",color:"#64748B",padding:"10px 22px",borderRadius:10,cursor:"pointer",fontSize:14,fontFamily:"inherit",fontWeight:600}}>Anuluj</button>
-          <button onClick={save} style={{border:"none",background:"linear-gradient(135deg,#1E293B,#0F172A)",color:"#fff",padding:"10px 22px",borderRadius:10,cursor:"pointer",fontSize:14,fontFamily:"inherit",fontWeight:700}}>{isNew?"Dodaj":"Zapisz"}</button>
-        </div>
-      </div>
     </div>
   );
 }
 
-// ── SHEET VIEW ────────────────────────────────────────────────────────────────
-function SheetView(props) {
-  var sheet = props.sheet; var onChange = props.onChange;
-  var p1 = useState(null); var colModal = p1[0]; var setColModal = p1[1];
-  var p2 = useState(null); var editingHeader = p2[0]; var setEditingHeader = p2[1];
-  var p3 = useState(null); var hoveredRow = p3[0]; var setHoveredRow = p3[1];
-  var p4 = useState(null); var detailRow = p4[0]; var setDetailRow = p4[1];
-  var p5 = useState(""); var search = p5[0]; var setSearch = p5[1];
-  var p6 = useState(false); var importModal = p6[0]; var setImportModal = p6[1];
-
-  var updateRow = function(rowId,colId,val){
-    onChange(Object.assign({},sheet,{rows:sheet.rows.map(function(r){return r.id===rowId?Object.assign({},r,{[colId]:val}):r;})}));
-  };
-  var updateFullRow = function(newRow){
-    onChange(Object.assign({},sheet,{rows:sheet.rows.map(function(r){return r.id===newRow.id?newRow:r;})}));
-  };
-  var addRow = function() {
-    var row = {id:mkId()};
-    sheet.columns.forEach(function(c) {
-      if(c.type==="checkbox") row[c.id]=false;
-      else if(c.type==="test") row[c.id]=emptyTest();
-      else if(c.type==="url") row[c.id]={label:"",url:""};
-      else if(c.type==="status") row[c.id]=(c.options&&c.options[1]&&c.options[1].label)||"Nie rozpoczęte";
-      else row[c.id]="";
-    });
-    onChange(Object.assign({},sheet,{rows:[...sheet.rows,row]}));
-  };
-  var deleteRow = function(id){onChange(Object.assign({},sheet,{rows:sheet.rows.filter(function(r){return r.id!==id;})}));};
-  var saveCol = function(col) {
-    var def = col.type==="checkbox"?false:col.type==="test"?emptyTest():col.type==="url"?{label:"",url:""}:col.type==="status"?((col.options&&col.options[0]&&col.options[0].label)||""):"";
-    if(colModal.isNew) onChange(Object.assign({},sheet,{columns:[...sheet.columns,col],rows:sheet.rows.map(function(r){return Object.assign({},r,{[col.id]:def});})}));
-    else onChange(Object.assign({},sheet,{columns:sheet.columns.map(function(c,i){return i===colModal.idx?col:c;})}));
-    setColModal(null);
-  };
-  var deleteCol = function(idx) {
-    var col = sheet.columns[idx];
-    onChange(Object.assign({},sheet,{columns:sheet.columns.filter(function(_,i){return i!==idx;}),rows:sheet.rows.map(function(r){var nr=Object.assign({},r);delete nr[col.id];return nr;})}));
-  };
-  var importRows = function(newRows) {
-    onChange(Object.assign({},sheet,{rows:[...sheet.rows,...newRows]}));
-    setImportModal(false);
-  };
-  var exportToClipboard = function() {
-    var headers = sheet.columns.map(function(c){return c.name;}).join("\t");
-    var rows = sheet.rows.map(function(r){
-      return sheet.columns.map(function(c){
-        var v=r[c.id];
-        if(c.type==="test") return (v&&v.state)||"";
-        if(c.type==="checkbox") return v?"TAK":"NIE";
-        if(c.type==="url") return (v&&v.url)||"";
-        return v||"";
-      }).join("\t");
-    }).join("\n");
-    navigator.clipboard.writeText(headers+"\n"+rows).then(function(){
-      alert("✅ Skopiowano!\nWklej Ctrl+V w Google Sheets lub Excel.");
-    });
-  };
-
-  var total = sheet.rows.length;
-  var statusCols = sheet.columns.filter(function(c){return c.type==="status";});
-  var checkCols = sheet.columns.filter(function(c){return c.type==="checkbox";});
-  var testCols = sheet.columns.filter(function(c){return c.type==="test";});
-  var donePct = statusCols.length&&total ? Math.round(sheet.rows.filter(function(r){return r[statusCols[0].id]==="Zakończone";}).length/total*100) : null;
-  var ts = null;
-  if(testCols.length&&total) {
-    var counts = {pass:0,fail:0,running:0,skipped:0,untested:0};
-    sheet.rows.forEach(function(r){testCols.forEach(function(c){var s=(r[c.id]&&typeof r[c.id]==="object")?r[c.id].state:"untested";counts[s]=(counts[s]||0)+1;});});
-    ts = counts;
-  }
-  var filtered = search.trim() ? sheet.rows.filter(function(r){
-    return sheet.columns.some(function(c){
-      var v=r[c.id];
-      var str=c.type==="test"?(v&&v.state)||"":c.type==="url"?((v&&v.label)||"")+((v&&v.url)||""):String(v||"");
-      return str.toLowerCase().includes(search.toLowerCase());
-    });
-  }) : sheet.rows;
-
-  var H = {padding:"11px 13px",fontWeight:700,fontSize:11,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".07em",background:"#0F172A",borderBottom:"1px solid #1E293B",whiteSpace:"nowrap",textAlign:"left"};
-  var C = {padding:"9px 12px",fontSize:13,color:"#334155",borderBottom:"1px solid #F1F5F9",verticalAlign:"middle"};
-
+// ── ROW DETAIL PANEL ──────────────────────────────────────────────────────────
+function RowDetailPanel({row, columns, onClose, onUpdate}) {
+  const [draft, setDraft] = useState({...row});
+  const update = (colId, val) => setDraft(d => ({...d,[colId]:val}));
   return (
-    <div>
-      {colModal && <ColumnModal col={colModal.col} onSave={saveCol} onClose={function(){setColModal(null);}}/>}
-      {detailRow && <RowDetailPanel row={detailRow} columns={sheet.columns} onClose={function(){setDetailRow(null);}} onUpdate={updateFullRow}/>}
-      {importModal && <SmartPasteModal columns={sheet.columns} onImport={importRows} onClose={function(){setImportModal(false);}}/>}
-
-      {/* Stats bar */}
-      <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap",alignItems:"stretch"}}>
-        <div style={{padding:"12px 20px",borderRadius:14,background:"linear-gradient(135deg,#1E293B,#334155)",minWidth:90}}>
-          <div style={{fontSize:22,fontWeight:900,color:"#fff",letterSpacing:"-1px"}}>{total}</div>
-          <div style={{fontSize:11,color:"#94A3B8",fontWeight:600,marginTop:1}}>Łącznie</div>
+    <div style={{position:"fixed",inset:0,zIndex:8888,display:"flex"}}>
+      <div onClick={onClose} style={{flex:1,background:"rgba(15,23,42,.4)"}}/>
+      <div style={{width:440,maxWidth:"90vw",background:"#fff",height:"100%",overflowY:"auto",
+        boxShadow:"-20px 0 60px rgba(0,0,0,.2)",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"18px 22px 14px",background:"linear-gradient(135deg,#0F172A,#1E293B)",flexShrink:0}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontSize:10,color:"#64748B",fontWeight:700,textTransform:"uppercase",letterSpacing:".07em",marginBottom:3}}>Szczegóły wiersza</div>
+              <div style={{fontSize:15,fontWeight:800,color:"#fff"}}>{(columns[0]&&draft[columns[0].id])||"Wiersz"}</div>
+            </div>
+            <button onClick={onClose} style={{border:"none",background:"rgba(255,255,255,.1)",color:"#fff",width:30,height:30,borderRadius:7,cursor:"pointer",fontSize:15}}>✕</button>
+          </div>
         </div>
-        {donePct!==null && (
-          <div style={{padding:"12px 20px",borderRadius:14,background:"#fff",border:"1px solid #E2E8F0",minWidth:165,display:"flex",flexDirection:"column",justifyContent:"center",gap:7}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span style={{fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em"}}>Postęp</span>
-              <span style={{fontSize:16,fontWeight:900,color:"#0F172A"}}>{donePct}%</span>
-            </div>
-            <ProgressBar value={donePct} color="#10B981"/>
-          </div>
-        )}
-        {ts && (
-          <div style={{padding:"12px 18px",borderRadius:14,background:"#fff",border:"1px solid #E2E8F0",display:"flex",flexDirection:"column",gap:8,minWidth:230}}>
-            <div style={{fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em"}}>🧪 Testy</div>
-            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-              {[{key:"pass",label:"Przeszły",color:"#065F46",bg:"#D1FAE5",dot:"#10B981"},{key:"fail",label:"Błąd",color:"#991B1B",bg:"#FEE2E2",dot:"#EF4444"},{key:"running",label:"W trakcie",color:"#854D0E",bg:"#FEF9C3",dot:"#EAB308"},{key:"untested",label:"Brak",color:"#475569",bg:"#F1F5F9",dot:"#94A3B8"}].filter(function(s){return ts[s.key]>0;}).map(function(s){
-                return (
-                  <div key={s.key} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:20,background:s.bg}}>
-                    <span style={{width:6,height:6,borderRadius:"50%",background:s.dot}}/>
-                    <span style={{fontSize:13,fontWeight:800,color:s.color}}>{ts[s.key]}</span>
-                    <span style={{fontSize:10,color:s.color,opacity:.75}}>{s.label}</span>
-                  </div>
-                );
-              })}
-            </div>
-            <div style={{display:"flex",height:5,borderRadius:99,overflow:"hidden",gap:1}}>
-              {ts.pass>0&&<div style={{flex:ts.pass,background:"#10B981"}}/>}
-              {ts.fail>0&&<div style={{flex:ts.fail,background:"#EF4444"}}/>}
-              {ts.running>0&&<div style={{flex:ts.running,background:"#EAB308"}}/>}
-              {ts.untested>0&&<div style={{flex:ts.untested,background:"#E2E8F0"}}/>}
-            </div>
-          </div>
-        )}
-        {checkCols.map(function(c){
-          var pct=total?Math.round(sheet.rows.filter(function(r){return r[c.id];}).length/total*100):0;
-          return (
-            <div key={c.id} style={{padding:"12px 20px",borderRadius:14,background:"linear-gradient(135deg,#6B21A8,#7C3AED)"}}>
-              <div style={{fontSize:22,fontWeight:900,color:"#fff",letterSpacing:"-1px"}}>{pct}%</div>
-              <div style={{fontSize:11,color:"#E9D5FF",fontWeight:600,marginTop:1}}>{c.name}</div>
-            </div>
-          );
-        })}
-        <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-          <div style={{position:"relative"}}>
-            <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"#94A3B8",fontSize:14}}>🔍</span>
-            <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Szukaj…"
-              style={{padding:"8px 12px 8px 32px",border:"1.5px solid #E2E8F0",borderRadius:10,fontSize:13,fontFamily:"inherit",background:"#fff",color:"#1E293B",width:180}}
-              onFocus={function(e){e.currentTarget.style.borderColor="#3B82F6";}} onBlur={function(e){e.currentTarget.style.borderColor="#E2E8F0";}}/>
-          </div>
-          <button onClick={function(){setImportModal(true);}}
-            style={{border:"1.5px solid #E2E8F0",background:"#fff",color:"#475569",padding:"8px 14px",borderRadius:10,cursor:"pointer",fontSize:13,fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:5,transition:"all .15s"}}
-            onMouseEnter={function(e){e.currentTarget.style.borderColor="#6366F1";e.currentTarget.style.color="#4F46E5";e.currentTarget.style.background="#EEF2FF";}}
-            onMouseLeave={function(e){e.currentTarget.style.borderColor="#E2E8F0";e.currentTarget.style.color="#475569";e.currentTarget.style.background="#fff";}}>
-            ✨ Import
-          </button>
-          <button onClick={exportToClipboard}
-            style={{border:"1.5px solid #E2E8F0",background:"#fff",color:"#475569",padding:"8px 14px",borderRadius:10,cursor:"pointer",fontSize:13,fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:5,transition:"all .15s"}}
-            onMouseEnter={function(e){e.currentTarget.style.borderColor="#10B981";e.currentTarget.style.color="#065F46";e.currentTarget.style.background="#F0FDF4";}}
-            onMouseLeave={function(e){e.currentTarget.style.borderColor="#E2E8F0";e.currentTarget.style.color="#475569";e.currentTarget.style.background="#fff";}}>
-            📥 Eksport
-          </button>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div style={{borderRadius:16,overflow:"hidden",boxShadow:"0 8px 32px rgba(0,0,0,.1)",border:"1px solid #E2E8F0"}}>
-        <div style={{overflowX:"auto"}}>
-          <table style={{width:"100%",borderCollapse:"collapse",background:"#fff"}}>
-            <thead>
-              <tr>
-                <th style={Object.assign({},H,{width:36,padding:"11px 8px"})}>#</th>
-                {sheet.columns.map(function(col,ci){
-                  return (
-                    <th key={col.id} style={H}>
-                      <div style={{display:"flex",alignItems:"center",gap:5}}>
-                        <span style={{fontSize:10,opacity:.45}}>{col.type==="status"?"🎯":col.type==="test"?"🧪":col.type==="checkbox"?"☑️":col.type==="url"?"🔗":col.comment?"💬":""}</span>
-                        {editingHeader===col.id ? (
-                          <input autoFocus value={col.name} onBlur={function(){setEditingHeader(null);}} onKeyDown={function(e){if(e.key==="Enter")setEditingHeader(null);}}
-                            onChange={function(e){var v=e.target.value;onChange(Object.assign({},sheet,{columns:sheet.columns.map(function(c,i){return i===ci?Object.assign({},c,{name:v}):c;})}));}}
-                            style={{border:"1px solid #3B82F6",borderRadius:4,padding:"2px 6px",fontSize:11,fontFamily:"inherit",fontWeight:700,color:"#fff",background:"#1E293B",width:100}}/>
-                        ) : (
-                          <span onDoubleClick={function(){setEditingHeader(col.id);}} style={{cursor:"default"}}>{col.name}</span>
-                        )}
-                        <div style={{display:"flex",gap:1,marginLeft:"auto"}}>
-                          <button onClick={function(){setColModal({col:col,idx:ci,isNew:false});}} style={{border:"none",background:"none",cursor:"pointer",color:"#475569",fontSize:10,padding:"2px 4px",borderRadius:4,opacity:.5}} onMouseEnter={function(e){e.currentTarget.style.opacity=1;e.currentTarget.style.background="#334155";}} onMouseLeave={function(e){e.currentTarget.style.opacity=.5;e.currentTarget.style.background="none";}}>✏️</button>
-                          <button onClick={function(){deleteCol(ci);}} style={{border:"none",background:"none",cursor:"pointer",color:"#475569",fontSize:10,padding:"2px 4px",borderRadius:4,opacity:.5}} onMouseEnter={function(e){e.currentTarget.style.opacity=1;e.currentTarget.style.background="#334155";}} onMouseLeave={function(e){e.currentTarget.style.opacity=.5;e.currentTarget.style.background="none";}}>🗑</button>
-                        </div>
-                      </div>
-                    </th>
-                  );
-                })}
-                <th style={Object.assign({},H,{width:44})}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(function(row,ri){
-                return (
-                  <tr key={row.id} className="row-hover"
-                    onMouseEnter={function(){setHoveredRow(row.id);}} onMouseLeave={function(){setHoveredRow(null);}}
-                    style={{background:ri%2===0?"#fff":"#FAFBFF",transition:"background .1s"}}>
-                    <td style={Object.assign({},C,{textAlign:"center",padding:"9px 8px"})}>
-                      <div className="row-num" onClick={function(){setDetailRow(row);}}
-                        style={{width:24,height:24,borderRadius:6,background:"#F1F5F9",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:11,fontWeight:700,color:"#64748B",margin:"0 auto",opacity:0,transition:"all .15s"}}
-                        onMouseEnter={function(e){e.currentTarget.style.background="#EFF6FF";e.currentTarget.style.color="#1D4ED8";}}
-                        onMouseLeave={function(e){e.currentTarget.style.background="#F1F5F9";e.currentTarget.style.color="#64748B";}}>
-                        {ri+1}
-                      </div>
-                    </td>
-                    {sheet.columns.map(function(col){
-                      return (
-                        <td key={col.id} style={Object.assign({},C,{textAlign:col.type==="checkbox"?"center":"left"})}>
-                          {col.type==="test" ? <TestCell value={row[col.id]} onChange={function(v){updateRow(row.id,col.id,v);}}/> :
-                           col.type==="status" ? <StatusCell value={row[col.id]} options={col.options} onChange={function(v){updateRow(row.id,col.id,v);}}/> :
-                           col.type==="checkbox" ? <CheckCell value={!!row[col.id]} onChange={function(v){updateRow(row.id,col.id,v);}}/> :
-                           col.type==="url" ? <UrlCell value={row[col.id]} onChange={function(v){updateRow(row.id,col.id,v);}}/> :
-                           col.type==="number" ? <input type="number" value={row[col.id]||""} onChange={function(e){updateRow(row.id,col.id,e.target.value);}} style={{border:"1px solid transparent",padding:"3px 6px",borderRadius:6,width:80,background:"transparent",fontFamily:"inherit",fontSize:13}}/> :
-                           col.comment ? <CommentCell value={row[col.id]||""} onChange={function(v){updateRow(row.id,col.id,v);}}/> :
-                           <input type="text" value={row[col.id]||""} onChange={function(e){updateRow(row.id,col.id,e.target.value);}}
-                             style={{border:"1px solid transparent",padding:"4px 7px",borderRadius:7,width:"100%",minWidth:60,background:"transparent",fontFamily:"inherit",fontSize:13}}
-                             onFocus={function(e){e.currentTarget.style.borderColor="#CBD5E1";}} onBlur={function(e){e.currentTarget.style.borderColor="transparent";}}/>}
-                        </td>
-                      );
-                    })}
-                    <td style={Object.assign({},C,{textAlign:"center",opacity:hoveredRow===row.id?1:0,transition:"opacity .15s"})}>
-                      <button onClick={function(){deleteRow(row.id);}} style={{border:"none",background:"#FEE2E2",cursor:"pointer",color:"#EF4444",fontSize:11,padding:"4px 7px",borderRadius:6,fontWeight:700}}>✕</button>
-                    </td>
-                  </tr>
-                );
-              })}
-              {filtered.length===0 && (
-                <tr><td colSpan={sheet.columns.length+2} style={{padding:"40px",textAlign:"center",color:"#94A3B8",fontSize:14}}>
-                  {search ? "Brak wyników dla: "+search : "Brak wierszy — kliknij „+ Dodaj wiersz""}
-                </td></tr>
+        <div style={{flex:1,padding:"18px 22px",display:"flex",flexDirection:"column",gap:14}}>
+          {columns.map(col => (
+            <div key={col.id}>
+              <label style={{display:"block",fontSize:10,fontWeight:800,color:"#64748B",textTransform:"uppercase",letterSpacing:".07em",marginBottom:7}}>
+                {col.type==="status"?"🎯":col.type==="test"?"🧪":col.type==="checkbox"?"☑️":col.comment?"💬":"✏️"} {col.name}
+              </label>
+              {col.type==="status" ? (
+                <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                  {(col.options||STATUS_OPTS).map(o=>(
+                    <div key={o.label} onClick={()=>update(col.id,o.label)}
+                      style={{padding:"5px 12px",borderRadius:20,cursor:"pointer",fontSize:12,fontWeight:700,
+                        background:o.bg,border:`2px solid ${draft[col.id]===o.label?o.dot:o.border}`,color:o.color,
+                        boxShadow:draft[col.id]===o.label?`0 0 0 3px ${o.dot}22`:"none"}}>
+                      {o.label}{draft[col.id]===o.label?" ✓":""}
+                    </div>
+                  ))}
+                </div>
+              ) : col.type==="test" ? (
+                <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                  {TEST_STATES.map(t=>(
+                    <div key={t.key} onClick={()=>update(col.id,{...draft[col.id]||emptyTest(),state:t.key})}
+                      style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",borderRadius:20,cursor:"pointer",
+                        background:t.bg,border:`2px solid ${(draft[col.id]?.state||"untested")===t.key?t.dot:t.border}`}}>
+                      <span style={{color:t.dot,fontWeight:900}}>{t.icon}</span>
+                      <span style={{color:t.color,fontWeight:700,fontSize:12}}>{t.label}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : col.type==="checkbox" ? (
+                <CheckCell value={!!draft[col.id]} onChange={v=>update(col.id,v)}/>
+              ) : (
+                <textarea value={draft[col.id]||""} onChange={e=>update(col.id,e.target.value)}
+                  rows={col.comment?4:2}
+                  style={{width:"100%",border:"1.5px solid #E2E8F0",borderRadius:9,padding:"9px 11px",
+                    fontSize:13,fontFamily:"inherit",resize:"vertical",lineHeight:1.6,background:"#FAFBFF",boxSizing:"border-box"}}
+                  onFocus={e=>e.currentTarget.style.borderColor="#3B82F6"}
+                  onBlur={e=>e.currentTarget.style.borderColor="#E2E8F0"}/>
               )}
-            </tbody>
-          </table>
+            </div>
+          ))}
         </div>
-        <div style={{padding:"12px 16px",background:"#F8FAFC",borderTop:"1px solid #F1F5F9",display:"flex",gap:10,alignItems:"center"}}>
-          {[
-            {label:"+ Dodaj wiersz",fn:addRow,hBg:"#EFF6FF",hBor:"#3B82F6",hCol:"#1D4ED8"},
-            {label:"+ Dodaj kolumnę",fn:function(){setColModal({col:{name:"",type:"text"},isNew:true});},hBg:"#F0FDF4",hBor:"#10B981",hCol:"#065F46"},
-          ].map(function(b){
-            return (
-              <button key={b.label} onClick={b.fn}
-                style={{border:"1.5px dashed #CBD5E1",background:"transparent",color:"#94A3B8",padding:"6px 16px",borderRadius:8,cursor:"pointer",fontSize:13,fontFamily:"inherit",fontWeight:600,transition:"all .15s"}}
-                onMouseEnter={function(e){e.currentTarget.style.background=b.hBg;e.currentTarget.style.borderColor=b.hBor;e.currentTarget.style.color=b.hCol;}}
-                onMouseLeave={function(e){e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor="#CBD5E1";e.currentTarget.style.color="#94A3B8";}}>
-                {b.label}
-              </button>
-            );
-          })}
-          {search && <span style={{marginLeft:"auto",color:"#64748B",fontSize:12}}>Znaleziono: <strong>{filtered.length}</strong> z {total}</span>}
+        <div style={{padding:"14px 22px",borderTop:"1px solid #F1F5F9",display:"flex",gap:8,justifyContent:"flex-end",flexShrink:0}}>
+          <button onClick={onClose} style={{border:"1.5px solid #E2E8F0",background:"transparent",color:"#64748B",padding:"9px 18px",borderRadius:9,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>Anuluj</button>
+          <button onClick={()=>{onUpdate(draft);onClose();}} style={{border:"none",background:"#0F172A",color:"#fff",padding:"9px 22px",borderRadius:9,cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>💾 Zapisz</button>
         </div>
       </div>
     </div>
@@ -1146,45 +479,207 @@ function SheetView(props) {
 }
 
 // ── PROJECT MODAL ─────────────────────────────────────────────────────────────
-function ProjectModal(props) {
-  var initial = props.initial; var onSave = props.onSave; var onClose = props.onClose;
-  var isEdit = !!(initial && initial.id);
-  var p1 = useState(initial&&initial.name?initial.name:""); var name = p1[0]; var setName = p1[1];
-  var p2 = useState((initial&&initial.emoji)||"🚀"); var emoji = p2[0]; var setEmoji = p2[1];
-  var p3 = useState((initial&&initial.color)||"#3B82F6"); var color = p3[0]; var setColor = p3[1];
+function ProjectModal({initial, onSave, onClose}) {
+  const isEdit = !!(initial?.id);
+  const [name, setName] = useState(initial?.name||"");
+  const [emoji, setEmoji] = useState(initial?.emoji||"🚀");
+  const [color, setColor] = useState(initial?.color||"#3B82F6");
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.7)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)"}}
-      onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
-      <div style={{background:"#fff",borderRadius:20,padding:32,width:420,maxWidth:"calc(100vw - 32px)",boxShadow:"0 30px 80px rgba(0,0,0,.3)",animation:"popIn .2s"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
-          <h3 style={{fontSize:20,fontWeight:800,color:"#0F172A"}}>{isEdit?"✏️ Edytuj projekt":"🆕 Nowy projekt"}</h3>
-          <button onClick={onClose} style={{border:"none",background:"#F1F5F9",fontSize:16,cursor:"pointer",color:"#64748B",width:32,height:32,borderRadius:8}}>✕</button>
+    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.7)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center"}}
+      onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div style={{background:"#fff",borderRadius:18,padding:28,width:400,maxWidth:"calc(100vw-32px)",boxShadow:"0 30px 80px rgba(0,0,0,.3)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+          <h3 style={{fontSize:18,fontWeight:800,color:"#0F172A"}}>{isEdit?"✏️ Edytuj projekt":"🆕 Nowy projekt"}</h3>
+          <button onClick={onClose} style={{border:"none",background:"#F1F5F9",fontSize:15,cursor:"pointer",color:"#64748B",width:30,height:30,borderRadius:7}}>✕</button>
         </div>
-        <div style={{marginBottom:16}}>
-          <label style={{display:"block",fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Nazwa projektu</label>
-          <input value={name} onChange={function(e){setName(e.target.value);}} placeholder="np. E-commerce, HC PROD, CRM…"
-            style={{width:"100%",border:"1.5px solid #E2E8F0",borderRadius:10,padding:"10px 14px",fontSize:14,fontFamily:"inherit"}}
-            onFocus={function(e){e.currentTarget.style.borderColor="#3B82F6";}} onBlur={function(e){e.currentTarget.style.borderColor="#E2E8F0";}}/>
+        <div style={{marginBottom:14}}>
+          <label style={{display:"block",fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em",marginBottom:7}}>Nazwa projektu</label>
+          <input value={name} onChange={e=>setName(e.target.value)} placeholder="np. E-commerce, HC PROD…"
+            style={{width:"100%",border:"1.5px solid #E2E8F0",borderRadius:9,padding:"9px 13px",fontSize:14,fontFamily:"inherit",boxSizing:"border-box"}}
+            onFocus={e=>e.currentTarget.style.borderColor="#3B82F6"} onBlur={e=>e.currentTarget.style.borderColor="#E2E8F0"}/>
         </div>
-        <div style={{marginBottom:16}}>
-          <label style={{display:"block",fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Emoji projektu</label>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-            {PROJECT_EMOJIS.map(function(e){
-              return <div key={e} onClick={function(){setEmoji(e);}} style={{width:36,height:36,borderRadius:8,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,border:"2px solid "+(emoji===e?"#3B82F6":"#E2E8F0"),background:emoji===e?"#EFF6FF":"#F8FAFC"}}>{e}</div>;
-            })}
+        <div style={{marginBottom:14}}>
+          <label style={{display:"block",fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em",marginBottom:7}}>Emoji</label>
+          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+            {PROJECT_EMOJIS.map(e=>(
+              <div key={e} onClick={()=>setEmoji(e)} style={{width:34,height:34,borderRadius:7,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,border:`2px solid ${emoji===e?"#3B82F6":"#E2E8F0"}`,background:emoji===e?"#EFF6FF":"#F8FAFC"}}>{e}</div>
+            ))}
           </div>
         </div>
-        <div style={{marginBottom:24}}>
-          <label style={{display:"block",fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Kolor akcentu</label>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            {PROJECT_COLORS.map(function(c){
-              return <div key={c} onClick={function(){setColor(c);}} style={{width:28,height:28,borderRadius:"50%",background:c,cursor:"pointer",border:"3px solid "+(color===c?"#0F172A":"transparent"),transform:color===c?"scale(1.2)":"scale(1)",transition:"transform .15s"}}/>;
-            })}
+        <div style={{marginBottom:22}}>
+          <label style={{display:"block",fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".06em",marginBottom:7}}>Kolor</label>
+          <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+            {PROJECT_COLORS.map(c=>(
+              <div key={c} onClick={()=>setColor(c)} style={{width:26,height:26,borderRadius:"50%",background:c,cursor:"pointer",border:`3px solid ${color===c?"#0F172A":"transparent"}`,transform:color===c?"scale(1.2)":"scale(1)",transition:"transform .15s"}}/>
+            ))}
           </div>
         </div>
-        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
-          <button onClick={onClose} style={{border:"1.5px solid #E2E8F0",background:"transparent",color:"#64748B",padding:"10px 22px",borderRadius:10,cursor:"pointer",fontSize:14,fontFamily:"inherit",fontWeight:600}}>Anuluj</button>
-          <button onClick={function(){if(name.trim())onSave(name.trim(),emoji,color);}} style={{border:"none",background:"linear-gradient(135deg,#1E293B,#0F172A)",color:"#fff",padding:"10px 22px",borderRadius:10,cursor:"pointer",fontSize:14,fontFamily:"inherit",fontWeight:700}}>{isEdit?"Zapisz":"Utwórz projekt"}</button>
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+          <button onClick={onClose} style={{border:"1.5px solid #E2E8F0",background:"transparent",color:"#64748B",padding:"9px 20px",borderRadius:9,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>Anuluj</button>
+          <button onClick={()=>{if(name.trim())onSave(name.trim(),emoji,color);}} style={{border:"none",background:"#0F172A",color:"#fff",padding:"9px 20px",borderRadius:9,cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>{isEdit?"Zapisz":"Utwórz"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── SHEET VIEW ────────────────────────────────────────────────────────────────
+function SheetView({sheet, onChange}) {
+  const [hoveredRow, setHoveredRow] = useState(null);
+  const [detailRow, setDetailRow] = useState(null);
+  const [search, setSearch] = useState("");
+  const [importModal, setImportModal] = useState(false);
+
+  const updateRow = (rowId,colId,val) =>
+    onChange({...sheet, rows:sheet.rows.map(r=>r.id===rowId?{...r,[colId]:val}:r)});
+  const updateFullRow = r => onChange({...sheet, rows:sheet.rows.map(x=>x.id===r.id?r:x)});
+  const addRow = () => {
+    const row = {id:mkId()};
+    sheet.columns.forEach(c => {
+      if(c.type==="checkbox") row[c.id]=false;
+      else if(c.type==="test") row[c.id]=emptyTest();
+      else if(c.type==="status") row[c.id]=(c.options?.[1]?.label)||"Nie rozpoczęte";
+      else row[c.id]="";
+    });
+    onChange({...sheet, rows:[...sheet.rows,row]});
+  };
+  const deleteRow = id => onChange({...sheet, rows:sheet.rows.filter(r=>r.id!==id)});
+  const importRows = rows => { onChange({...sheet, rows:[...sheet.rows,...rows]}); setImportModal(false); };
+
+  const total = sheet.rows.length;
+  const statusCols = sheet.columns.filter(c=>c.type==="status");
+  const testCols = sheet.columns.filter(c=>c.type==="test");
+  const checkCols = sheet.columns.filter(c=>c.type==="checkbox");
+  const donePct = statusCols.length&&total ? Math.round(sheet.rows.filter(r=>r[statusCols[0].id]==="Zakończone").length/total*100) : null;
+  let ts = null;
+  if(testCols.length&&total) {
+    const counts = {pass:0,fail:0,running:0,skipped:0,untested:0};
+    sheet.rows.forEach(r=>testCols.forEach(c=>{const s=(r[c.id]&&typeof r[c.id]==="object")?r[c.id].state:"untested";counts[s]=(counts[s]||0)+1;}));
+    ts = counts;
+  }
+  const filtered = search.trim() ? sheet.rows.filter(r=>sheet.columns.some(c=>{
+    const v=r[c.id]; const str=c.type==="test"?(v?.state||""):String(v||"");
+    return str.toLowerCase().includes(search.toLowerCase());
+  })) : sheet.rows;
+
+  const H = {padding:"10px 12px",fontWeight:700,fontSize:11,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".07em",background:"#0F172A",borderBottom:"1px solid #1E293B",whiteSpace:"nowrap",textAlign:"left"};
+  const C = {padding:"8px 12px",fontSize:13,color:"#334155",borderBottom:"1px solid #F1F5F9",verticalAlign:"middle"};
+
+  return (
+    <div>
+      {detailRow && <RowDetailPanel row={detailRow} columns={sheet.columns} onClose={()=>setDetailRow(null)} onUpdate={updateFullRow}/>}
+      {importModal && <SmartPasteModal columns={sheet.columns} onImport={importRows} onClose={()=>setImportModal(false)}/>}
+
+      {/* Stats */}
+      <div style={{display:"flex",gap:10,marginBottom:18,flexWrap:"wrap",alignItems:"stretch"}}>
+        <div style={{padding:"11px 18px",borderRadius:12,background:"linear-gradient(135deg,#1E293B,#334155)",minWidth:80}}>
+          <div style={{fontSize:20,fontWeight:900,color:"#fff"}}>{total}</div>
+          <div style={{fontSize:10,color:"#94A3B8",fontWeight:600,marginTop:1}}>Łącznie</div>
+        </div>
+        {donePct!==null && (
+          <div style={{padding:"11px 18px",borderRadius:12,background:"#fff",border:"1px solid #E2E8F0",minWidth:150,display:"flex",flexDirection:"column",justifyContent:"center",gap:6}}>
+            <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontSize:10,fontWeight:700,color:"#64748B",textTransform:"uppercase"}}>Postęp</span><span style={{fontSize:15,fontWeight:900,color:"#0F172A"}}>{donePct}%</span></div>
+            <ProgressBar value={donePct}/>
+          </div>
+        )}
+        {ts && (
+          <div style={{padding:"11px 16px",borderRadius:12,background:"#fff",border:"1px solid #E2E8F0",display:"flex",flexDirection:"column",gap:7,minWidth:210}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#64748B",textTransform:"uppercase"}}>🧪 Testy</div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {[{key:"pass",label:"Przeszły",color:"#065F46",bg:"#D1FAE5",dot:"#10B981"},{key:"fail",label:"Błąd",color:"#991B1B",bg:"#FEE2E2",dot:"#EF4444"},{key:"running",label:"W trakcie",color:"#854D0E",bg:"#FEF9C3",dot:"#EAB308"},{key:"untested",label:"Brak",color:"#475569",bg:"#F1F5F9",dot:"#94A3B8"}].filter(s=>ts[s.key]>0).map(s=>(
+                <div key={s.key} style={{display:"flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:20,background:s.bg}}>
+                  <span style={{width:5,height:5,borderRadius:"50%",background:s.dot}}/>
+                  <span style={{fontSize:12,fontWeight:800,color:s.color}}>{ts[s.key]}</span>
+                  <span style={{fontSize:10,color:s.color,opacity:.75}}>{s.label}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{display:"flex",height:4,borderRadius:99,overflow:"hidden"}}>
+              {ts.pass>0&&<div style={{flex:ts.pass,background:"#10B981"}}/>}
+              {ts.fail>0&&<div style={{flex:ts.fail,background:"#EF4444"}}/>}
+              {ts.running>0&&<div style={{flex:ts.running,background:"#EAB308"}}/>}
+              {ts.untested>0&&<div style={{flex:ts.untested,background:"#E2E8F0"}}/>}
+            </div>
+          </div>
+        )}
+        {checkCols.map(c=>{
+          const pct=total?Math.round(sheet.rows.filter(r=>r[c.id]).length/total*100):0;
+          return <div key={c.id} style={{padding:"11px 18px",borderRadius:12,background:"linear-gradient(135deg,#6B21A8,#7C3AED)"}}><div style={{fontSize:20,fontWeight:900,color:"#fff"}}>{pct}%</div><div style={{fontSize:10,color:"#E9D5FF",fontWeight:600,marginTop:1}}>{c.name}</div></div>;
+        })}
+        <div style={{marginLeft:"auto",display:"flex",gap:7,alignItems:"center"}}>
+          <div style={{position:"relative"}}>
+            <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:"#94A3B8",fontSize:13}}>🔍</span>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Szukaj…"
+              style={{padding:"7px 11px 7px 30px",border:"1.5px solid #E2E8F0",borderRadius:9,fontSize:13,fontFamily:"inherit",background:"#fff",width:170}}
+              onFocus={e=>e.currentTarget.style.borderColor="#3B82F6"} onBlur={e=>e.currentTarget.style.borderColor="#E2E8F0"}/>
+          </div>
+          <button onClick={()=>setImportModal(true)}
+            style={{border:"1.5px solid #E2E8F0",background:"#fff",color:"#475569",padding:"7px 13px",borderRadius:9,cursor:"pointer",fontSize:13,fontFamily:"inherit",fontWeight:600}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor="#6366F1";e.currentTarget.style.color="#4F46E5";e.currentTarget.style.background="#EEF2FF";}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor="#E2E8F0";e.currentTarget.style.color="#475569";e.currentTarget.style.background="#fff";}}>
+            ✨ Import
+          </button>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div style={{borderRadius:14,overflow:"hidden",boxShadow:"0 6px 24px rgba(0,0,0,.1)",border:"1px solid #E2E8F0"}}>
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",background:"#fff"}}>
+            <thead><tr>
+              <th style={{...H,width:34,padding:"10px 7px"}}>#</th>
+              {sheet.columns.map(col=>(
+                <th key={col.id} style={H}>
+                  <span style={{fontSize:10,opacity:.4,marginRight:4}}>{col.type==="status"?"🎯":col.type==="test"?"🧪":col.type==="checkbox"?"☑️":col.comment?"💬":""}</span>
+                  {col.name}
+                </th>
+              ))}
+              <th style={{...H,width:40}}/>
+            </tr></thead>
+            <tbody>
+              {filtered.map((row,ri)=>(
+                <tr key={row.id}
+                  onMouseEnter={()=>setHoveredRow(row.id)} onMouseLeave={()=>setHoveredRow(null)}
+                  style={{background:hoveredRow===row.id?"#EFF6FF":ri%2===0?"#fff":"#FAFBFF",transition:"background .1s"}}>
+                  <td style={{...C,textAlign:"center",padding:"8px 6px"}}>
+                    <div onClick={()=>setDetailRow(row)}
+                      style={{width:22,height:22,borderRadius:5,background:"#F1F5F9",display:"flex",alignItems:"center",justifyContent:"center",
+                        cursor:"pointer",fontSize:11,fontWeight:700,color:"#64748B",margin:"0 auto",
+                        opacity:hoveredRow===row.id?1:0,transition:"opacity .15s"}}
+                      onMouseEnter={e=>{e.currentTarget.style.background="#DBEAFE";e.currentTarget.style.color="#1D4ED8";}}
+                      onMouseLeave={e=>{e.currentTarget.style.background="#F1F5F9";e.currentTarget.style.color="#64748B";}}>
+                      {ri+1}
+                    </div>
+                  </td>
+                  {sheet.columns.map(col=>(
+                    <td key={col.id} style={{...C,textAlign:col.type==="checkbox"?"center":"left"}}>
+                      {col.type==="test" ? <TestCell value={row[col.id]} onChange={v=>updateRow(row.id,col.id,v)}/> :
+                       col.type==="status" ? <StatusCell value={row[col.id]} options={col.options} onChange={v=>updateRow(row.id,col.id,v)}/> :
+                       col.type==="checkbox" ? <CheckCell value={!!row[col.id]} onChange={v=>updateRow(row.id,col.id,v)}/> :
+                       col.comment ? <CommentCell value={row[col.id]||""} onChange={v=>updateRow(row.id,col.id,v)}/> :
+                       <input value={row[col.id]||""} onChange={e=>updateRow(row.id,col.id,e.target.value)}
+                         style={{border:"1px solid transparent",padding:"3px 6px",borderRadius:6,width:"100%",minWidth:55,background:"transparent",fontFamily:"inherit",fontSize:13}}
+                         onFocus={e=>e.currentTarget.style.borderColor="#CBD5E1"} onBlur={e=>e.currentTarget.style.borderColor="transparent"}/>}
+                    </td>
+                  ))}
+                  <td style={{...C,textAlign:"center",opacity:hoveredRow===row.id?1:0,transition:"opacity .15s"}}>
+                    <button onClick={()=>deleteRow(row.id)} style={{border:"none",background:"#FEE2E2",cursor:"pointer",color:"#EF4444",fontSize:11,padding:"3px 6px",borderRadius:5,fontWeight:700}}>✕</button>
+                  </td>
+                </tr>
+              ))}
+              {filtered.length===0&&<tr><td colSpan={sheet.columns.length+2} style={{padding:"36px",textAlign:"center",color:"#94A3B8",fontSize:14}}>
+                {search?"Brak wyników dla: "+search:"Brak wierszy — kliknij „+ Dodaj wiersz""}
+              </td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <div style={{padding:"10px 14px",background:"#F8FAFC",borderTop:"1px solid #F1F5F9",display:"flex",gap:8}}>
+          <button onClick={addRow}
+            style={{border:"1.5px dashed #CBD5E1",background:"transparent",color:"#94A3B8",padding:"5px 14px",borderRadius:7,cursor:"pointer",fontSize:13,fontFamily:"inherit",fontWeight:600}}
+            onMouseEnter={e=>{e.currentTarget.style.background="#EFF6FF";e.currentTarget.style.borderColor="#3B82F6";e.currentTarget.style.color="#1D4ED8";}}
+            onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor="#CBD5E1";e.currentTarget.style.color="#94A3B8";}}>
+            + Dodaj wiersz
+          </button>
         </div>
       </div>
     </div>
@@ -1192,277 +687,219 @@ function ProjectModal(props) {
 }
 
 // ── ROOT APP ──────────────────────────────────────────────────────────────────
-function App() {
-  var p1 = useState(defaultProjects); var projects = p1[0]; var setProjects = p1[1];
-  var p2 = useState(defaultProjects[0].id); var activeProjId = p2[0]; var setActiveProjId = p2[1];
-  var p3 = useState(defaultProjects[0].sheets[0].id); var activeSheetId = p3[0]; var setActiveSheetId = p3[1];
-  var p4 = useState(true); var loading = p4[0]; var setLoading = p4[1];
-  var p5 = useState(false); var saving = p5[0]; var setSaving = p5[1];
-  var p6 = useState(null); var lastSaved = p6[0]; var setLastSaved = p6[1];
-  var p7 = useState(true); var sidebarOpen = p7[0]; var setSidebarOpen = p7[1];
-  var p8 = useState(null); var editingTab = p8[0]; var setEditingTab = p8[1];
-  var p9 = useState(false); var newSheetMode = p9[0]; var setNewSheetMode = p9[1];
-  var p10 = useState(""); var newSheetName = p10[0]; var setNewSheetName = p10[1];
-  var p11 = useState(null); var projModal = p11[0]; var setProjModal = p11[1];
-  var saveDebounced = useRef(null);
+export default function App() {
+  const [projects, setProjects] = useState(defaultProjects);
+  const [activeProjId, setActiveProjId] = useState(defaultProjects[0].id);
+  const [activeSheetId, setActiveSheetId] = useState(defaultProjects[0].sheets[0].id);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [newSheetMode, setNewSheetMode] = useState(false);
+  const [newSheetName, setNewSheetName] = useState("");
+  const [projModal, setProjModal] = useState(null);
+  const [editingTab, setEditingTab] = useState(null);
 
-  useEffect(function() {
-    loadData().then(function(data) {
-      setProjects(data);
-      setActiveProjId(data[0].id);
-      setActiveSheetId(data[0].sheets[0].id);
-      setLoading(false);
-    });
-  }, []);
+  const activeProj = projects.find(p=>p.id===activeProjId)||projects[0];
+  const activeSheet = activeProj&&(activeProj.sheets.find(s=>s.id===activeSheetId)||activeProj.sheets[0]);
 
-  useEffect(function() {
-    if(loading) return;
-    clearTimeout(saveDebounced.current);
-    saveDebounced.current = setTimeout(function() {
-      setSaving(true);
-      saveData(projects).then(function() { setLastSaved(new Date()); setSaving(false); });
-    }, 1500);
-  }, [projects]);
-
-  var activeProj = projects.find(function(p){return p.id===activeProjId;}) || projects[0];
-  var activeSheet = activeProj && (activeProj.sheets.find(function(s){return s.id===activeSheetId;}) || activeProj.sheets[0]);
-
-  var updateSheet = function(sheet) {
-    setProjects(function(ps){return ps.map(function(p){return p.id===activeProjId?Object.assign({},p,{sheets:p.sheets.map(function(s){return s.id===sheet.id?sheet:s;})}):p;});});
-  };
-  var duplicateSheet = function(sheetId) {
-    var src = activeProj.sheets.find(function(s){return s.id===sheetId;});
-    if(!src) return;
-    var copy = JSON.parse(JSON.stringify(src));
-    copy.id = mkId(); copy.name = src.name+" (kopia)";
-    copy.rows = copy.rows.map(function(r){return Object.assign({},r,{id:mkId()});});
-    setProjects(function(ps){return ps.map(function(p){return p.id===activeProjId?Object.assign({},p,{sheets:[...p.sheets,copy]}):p;});});
+  const updateSheet = sheet => setProjects(ps=>ps.map(p=>p.id===activeProjId?{...p,sheets:p.sheets.map(s=>s.id===sheet.id?sheet:s)}:p));
+  const duplicateSheet = sid => {
+    const src = activeProj.sheets.find(s=>s.id===sid); if(!src) return;
+    const copy = JSON.parse(JSON.stringify(src));
+    copy.id=mkId(); copy.name=src.name+" (kopia)"; copy.rows=copy.rows.map(r=>({...r,id:mkId()}));
+    setProjects(ps=>ps.map(p=>p.id===activeProjId?{...p,sheets:[...p.sheets,copy]}:p));
     setActiveSheetId(copy.id);
   };
-  var deleteSheet = function(sheetId) {
+  const deleteSheet = sid => {
     if(activeProj.sheets.length<=1) return;
-    var rest = activeProj.sheets.filter(function(s){return s.id!==sheetId;});
-    setProjects(function(ps){return ps.map(function(p){return p.id===activeProjId?Object.assign({},p,{sheets:rest}):p;});});
-    if(activeSheetId===sheetId) setActiveSheetId(rest[0].id);
+    const rest=activeProj.sheets.filter(s=>s.id!==sid);
+    setProjects(ps=>ps.map(p=>p.id===activeProjId?{...p,sheets:rest}:p));
+    if(activeSheetId===sid) setActiveSheetId(rest[0].id);
   };
-  var addSheet = function() {
+  const addSheet = () => {
     if(!newSheetName.trim()) return;
-    var s = {id:mkId(),name:"📄 "+newSheetName.trim(),icon:"📄",
+    const s={id:mkId(),name:"📄 "+newSheetName.trim(),icon:"📄",
       columns:[{id:mkId(),name:"Nazwa",type:"text"},{id:mkId(),name:"Status",type:"status",options:STATUS_OPTS},{id:mkId(),name:"Testy",type:"test"}],rows:[]};
-    setProjects(function(ps){return ps.map(function(p){return p.id===activeProjId?Object.assign({},p,{sheets:[...p.sheets,s]}):p;});});
+    setProjects(ps=>ps.map(p=>p.id===activeProjId?{...p,sheets:[...p.sheets,s]}:p));
     setActiveSheetId(s.id); setNewSheetName(""); setNewSheetMode(false);
   };
-  var addProject = function(name,emoji,color) {
-    var p = {id:mkId(),name:name,emoji:emoji,color:color,sheets:[mkChecklistSheet([])]};
-    setProjects(function(ps){return [...ps,p];});
-    setActiveProjId(p.id); setActiveSheetId(p.sheets[0].id);
+  const saveProject = (id,name,emoji,color) => {
+    if(id) setProjects(ps=>ps.map(p=>p.id===id?{...p,name,emoji,color}:p));
+    else { const p={id:mkId(),name,emoji,color,sheets:[mkChecklistSheet()]}; setProjects(ps=>[...ps,p]); setActiveProjId(p.id); setActiveSheetId(p.sheets[0].id); }
     setProjModal(null);
-  };
-  var updateProject = function(id,name,emoji,color) {
-    setProjects(function(ps){return ps.map(function(p){return p.id===id?Object.assign({},p,{name:name,emoji:emoji,color:color}):p;});});
-    setProjModal(null);
-  };
-  var deleteProject = function(id) {
-    if(projects.length<=1) return;
-    var rest = projects.filter(function(p){return p.id!==id;});
-    setProjects(rest);
-    if(activeProjId===id){setActiveProjId(rest[0].id);setActiveSheetId(rest[0].sheets[0].id);}
   };
 
-  var releaseSheet = activeProj && activeProj.sheets.find(function(s){return s.columns && s.columns.find(function(c){return c.id==="col_be";});});
-  var releaseHealth = 0;
-  if(releaseSheet) {
-    var t = releaseSheet.rows.length;
-    if(t > 0) {
-      var beCol = releaseSheet.columns.find(function(c){return c.id==="col_be";});
-      var feCol = releaseSheet.columns.find(function(c){return c.id==="col_fe";});
-      var tcCol = releaseSheet.columns.find(function(c){return c.id==="col_testy";});
-      var score = 0;
-      releaseSheet.rows.forEach(function(r){
-        var pts=0;
-        if(beCol&&r[beCol.id]==="Zakończone")pts++;
-        if(feCol&&r[feCol.id]==="Zakończone")pts++;
-        if(tcCol&&r[tcCol.id]&&r[tcCol.id].state==="pass")pts++;
-        score+=pts/3;
-      });
-      releaseHealth = Math.round(score/t*100);
+  // Release health
+  const rSheet = activeProj?.sheets.find(s=>s.columns?.find(c=>c.id==="col_be"||c.id==="col_test"));
+  let releaseHealth = 0;
+  if(rSheet) {
+    const t=rSheet.rows.length;
+    if(t>0) {
+      const be=rSheet.columns.find(c=>c.id==="col_be"); const fe=rSheet.columns.find(c=>c.id==="col_fe"); const tc=rSheet.columns.find(c=>c.type==="test");
+      let score=0;
+      rSheet.rows.forEach(r=>{ let pts=0; if(be&&r[be.id]==="Zakończone")pts++; if(fe&&r[fe.id]==="Zakończone")pts++; if(tc&&r[tc.id]?.state==="pass")pts++; score+=pts/3; });
+      releaseHealth=Math.round(score/t*100);
     }
   }
-  var hColor = releaseHealth>70?"#34D399":releaseHealth>40?"#FCD34D":"#F87171";
-
-  if(loading) return (
-    <div style={{minHeight:"100vh",background:"#0F172A",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16,fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
-      <div style={{fontSize:48,animation:"spin 1.5s linear infinite"}}>⚙️</div>
-      <div style={{color:"#fff",fontWeight:700,fontSize:16}}>Wczytywanie…</div>
-      <div style={{color:"#64748B",fontSize:13}}>Synchronizacja z Google Sheets</div>
-    </div>
-  );
+  const hColor = releaseHealth>70?"#34D399":releaseHealth>40?"#FCD34D":"#F87171";
 
   return (
-    <div style={{minHeight:"100vh",background:"#F0F4FF",fontFamily:"'Segoe UI',system-ui,sans-serif",display:"flex",flexDirection:"column"}}>
-      {projModal && <ProjectModal initial={projModal} onSave={function(n,e,c){
-        if(projModal.id) updateProject(projModal.id,n,e,c);
-        else addProject(n,e,c);
-      }} onClose={function(){setProjModal(null);}}/>}
+    <div style={{display:"flex",flexDirection:"column",height:"100vh",fontFamily:"'Segoe UI',system-ui,sans-serif",background:"#F0F4FF",overflow:"hidden"}}>
+      <style>{`
+        .rh:hover{background:#EFF6FF !important;}
+        .rh:hover .rn{opacity:1 !important;}
+        @keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+      `}</style>
+
+      {projModal && <ProjectModal initial={projModal} onSave={(n,e,c)=>saveProject(projModal.id,n,e,c)} onClose={()=>setProjModal(null)}/>}
 
       {/* TOPBAR */}
-      <div style={{background:"linear-gradient(135deg,#0F172A,#1E293B)",boxShadow:"0 4px 24px rgba(0,0,0,.35)",position:"sticky",top:0,zIndex:100,flexShrink:0}}>
-        <div style={{padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid rgba(255,255,255,.05)"}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <button onClick={function(){setSidebarOpen(function(o){return !o;});}}
-              style={{border:"none",background:"rgba(255,255,255,.06)",color:"#94A3B8",width:34,height:34,borderRadius:8,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}
-              onMouseEnter={function(e){e.currentTarget.style.background="rgba(255,255,255,.12)";}}
-              onMouseLeave={function(e){e.currentTarget.style.background="rgba(255,255,255,.06)";}}>☰</button>
-            <div style={{width:36,height:36,borderRadius:10,background:activeProj.color+"33",border:"1.5px solid "+activeProj.color+"66",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>
+      <div style={{background:"linear-gradient(135deg,#0F172A,#1E293B)",boxShadow:"0 4px 20px rgba(0,0,0,.3)",flexShrink:0}}>
+        <div style={{padding:"11px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid rgba(255,255,255,.05)"}}>
+          <div style={{display:"flex",alignItems:"center",gap:9}}>
+            <button onClick={()=>setSidebarOpen(o=>!o)}
+              style={{border:"none",background:"rgba(255,255,255,.07)",color:"#94A3B8",width:32,height:32,borderRadius:7,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}
+              onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,.13)"}
+              onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,.07)"}>☰</button>
+            <div style={{width:34,height:34,borderRadius:9,background:activeProj.color+"2a",border:`1.5px solid ${activeProj.color}55`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0}}>
               {activeProj.emoji}
             </div>
             <div>
-              <div style={{color:"#fff",fontWeight:900,fontSize:15,letterSpacing:"-.3px"}}>{activeProj.name}</div>
-              <div style={{color:"#475569",fontSize:11,display:"flex",alignItems:"center",gap:6}}>
-                Release Tracker
-                {saving && <span style={{background:"#1E293B",color:"#60A5FA",fontSize:10,padding:"1px 8px",borderRadius:20,fontWeight:600,animation:"pulse 1s infinite"}}>⏳ Zapisywanie…</span>}
-                {!saving && lastSaved && <span style={{background:"#1E293B",color:"#34D399",fontSize:10,padding:"1px 8px",borderRadius:20,fontWeight:600}}>✓ {lastSaved.toLocaleTimeString("pl")}</span>}
-              </div>
+              <div style={{color:"#fff",fontWeight:900,fontSize:14,letterSpacing:"-.2px"}}>{activeProj.name}</div>
+              <div style={{color:"#475569",fontSize:11}}>Release Tracker · podgląd na żywo ✓</div>
             </div>
           </div>
-          {releaseSheet && (
-            <div style={{display:"flex",alignItems:"center",gap:12}}>
+          {rSheet && (
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
               <div>
-                <div style={{color:"#475569",fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:4,textAlign:"right"}}>Release Health</div>
-                <div style={{width:140,height:5,background:"#1E293B",borderRadius:99,overflow:"hidden"}}>
-                  <div style={{height:"100%",width:releaseHealth+"%",background:hColor,borderRadius:99,transition:"width .8s"}}/>
+                <div style={{color:"#475569",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:4,textAlign:"right"}}>Release Health</div>
+                <div style={{width:120,height:4,background:"#1E293B",borderRadius:99,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${releaseHealth}%`,background:hColor,borderRadius:99,transition:"width .8s"}}/>
                 </div>
               </div>
-              <div style={{fontSize:22,fontWeight:900,color:hColor,letterSpacing:"-1.5px",minWidth:48,textAlign:"right"}}>{releaseHealth}%</div>
+              <div style={{fontSize:20,fontWeight:900,color:hColor,minWidth:42,textAlign:"right"}}>{releaseHealth}%</div>
             </div>
           )}
         </div>
         {/* TABS */}
-        <div style={{padding:"0 16px",display:"flex",alignItems:"stretch",overflowX:"auto",gap:2}}>
-          {activeProj.sheets.map(function(s){
-            var isA = activeSheetId===s.id;
+        <div style={{padding:"0 14px",display:"flex",alignItems:"stretch",overflowX:"auto",gap:2}}>
+          {activeProj.sheets.map(s=>{
+            const isA=activeSheetId===s.id;
             return (
-              <div key={s.id} className="tab-pill" onClick={function(){setActiveSheetId(s.id);}}
-                style={{display:"flex",alignItems:"center",gap:5,padding:"0 10px",cursor:"pointer",flexShrink:0,
-                  borderBottom:isA?"3px solid #60A5FA":"3px solid transparent"}}>
-                <span style={{fontSize:12}}>{s.icon||"📄"}</span>
+              <div key={s.id} onClick={()=>setActiveSheetId(s.id)}
+                style={{display:"flex",alignItems:"center",gap:5,padding:"0 9px",cursor:"pointer",flexShrink:0,
+                  borderBottom:isA?"3px solid #60A5FA":"3px solid transparent",background:isA?"rgba(96,165,250,.07)":"transparent"}}>
+                <span style={{fontSize:11}}>{s.icon||"📄"}</span>
                 {editingTab===s.id ? (
                   <input autoFocus value={s.name.replace(/^\S+\s/,"")}
-                    onBlur={function(){setEditingTab(null);}}
-                    onKeyDown={function(e){if(e.key==="Enter")setEditingTab(null);}}
-                    onChange={function(e){var v=e.target.value;setProjects(function(ps){return ps.map(function(p){return p.id===activeProjId?Object.assign({},p,{sheets:p.sheets.map(function(x){return x.id===s.id?Object.assign({},x,{name:(s.icon||"📄")+" "+v}):x;})}):p;});});}}
-                    style={{border:"1px solid #60A5FA",background:"transparent",color:"#fff",fontSize:12,fontFamily:"inherit",borderRadius:4,padding:"2px 6px",width:120}}/>
+                    onBlur={()=>setEditingTab(null)} onKeyDown={e=>e.key==="Enter"&&setEditingTab(null)}
+                    onChange={e=>{const v=e.target.value;setProjects(ps=>ps.map(p=>p.id===activeProjId?{...p,sheets:p.sheets.map(x=>x.id===s.id?{...x,name:(s.icon||"📄")+" "+v}:x)}:p));}}
+                    style={{border:"1px solid #60A5FA",background:"transparent",color:"#fff",fontSize:12,fontFamily:"inherit",borderRadius:4,padding:"2px 6px",width:110}}/>
                 ) : (
-                  <span onDoubleClick={function(){setEditingTab(s.id);}}
-                    style={{color:isA?"#F8FAFC":"#94A3B8",fontSize:12,fontWeight:isA?700:500,padding:"14px 0",whiteSpace:"nowrap"}}>
+                  <span onDoubleClick={()=>setEditingTab(s.id)}
+                    style={{color:isA?"#F8FAFC":"#94A3B8",fontSize:12,fontWeight:isA?700:400,padding:"13px 0",whiteSpace:"nowrap"}}>
                     {s.name.replace(/^\S+\s/,"")}
                   </span>
                 )}
-                <button onClick={function(e){e.stopPropagation();duplicateSheet(s.id);}} title="Duplikuj"
-                  style={{border:"none",background:"none",color:"#334155",cursor:"pointer",fontSize:11,padding:"1px 3px",borderRadius:3,opacity:.5}}
-                  onMouseEnter={function(e){e.currentTarget.style.color="#60A5FA";e.currentTarget.style.opacity=1;e.currentTarget.style.background="#1E293B";}}
-                  onMouseLeave={function(e){e.currentTarget.style.color="#334155";e.currentTarget.style.opacity=.5;e.currentTarget.style.background="none";}}>⧉</button>
-                {activeProj.sheets.length>1 && (
-                  <button onClick={function(e){e.stopPropagation();deleteSheet(s.id);}}
-                    style={{border:"none",background:"none",color:"#334155",cursor:"pointer",fontSize:11,padding:"1px 4px",borderRadius:4,opacity:.5}}
-                    onMouseEnter={function(e){e.currentTarget.style.color="#F87171";e.currentTarget.style.opacity=1;}}
-                    onMouseLeave={function(e){e.currentTarget.style.color="#334155";e.currentTarget.style.opacity=.5;}}>✕</button>
-                )}
+                <button onClick={e=>{e.stopPropagation();duplicateSheet(s.id);}}
+                  style={{border:"none",background:"none",color:"#475569",cursor:"pointer",fontSize:10,padding:"1px 3px",opacity:.5}}
+                  onMouseEnter={e=>{e.currentTarget.style.color="#60A5FA";e.currentTarget.style.opacity="1";}}
+                  onMouseLeave={e=>{e.currentTarget.style.color="#475569";e.currentTarget.style.opacity=".5";}}>⧉</button>
+                {activeProj.sheets.length>1&&<button onClick={e=>{e.stopPropagation();deleteSheet(s.id);}}
+                  style={{border:"none",background:"none",color:"#475569",cursor:"pointer",fontSize:10,padding:"1px 4px",opacity:.5}}
+                  onMouseEnter={e=>{e.currentTarget.style.color="#F87171";e.currentTarget.style.opacity="1";}}
+                  onMouseLeave={e=>{e.currentTarget.style.color="#475569";e.currentTarget.style.opacity=".5";}}>✕</button>
               </div>
             );
           })}
           {newSheetMode ? (
-            <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px"}}>
-              <input autoFocus value={newSheetName} onChange={function(e){setNewSheetName(e.target.value);}}
-                onKeyDown={function(e){if(e.key==="Enter")addSheet();if(e.key==="Escape")setNewSheetMode(false);}}
-                placeholder="Nazwa arkusza…" style={{border:"1px solid #60A5FA",background:"rgba(255,255,255,.08)",color:"#fff",fontSize:12,borderRadius:8,padding:"4px 10px",fontFamily:"inherit",width:150}}/>
-              <button onClick={addSheet} style={{border:"none",background:"#10B981",color:"#fff",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>✓</button>
-              <button onClick={function(){setNewSheetMode(false);}} style={{border:"none",background:"#475569",color:"#fff",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12}}>✕</button>
+            <div style={{display:"flex",alignItems:"center",gap:7,padding:"6px 10px"}}>
+              <input autoFocus value={newSheetName} onChange={e=>setNewSheetName(e.target.value)}
+                onKeyDown={e=>{if(e.key==="Enter")addSheet();if(e.key==="Escape")setNewSheetMode(false);}}
+                placeholder="Nazwa…" style={{border:"1px solid #60A5FA",background:"rgba(255,255,255,.08)",color:"#fff",fontSize:12,borderRadius:7,padding:"3px 9px",fontFamily:"inherit",width:130}}/>
+              <button onClick={addSheet} style={{border:"none",background:"#10B981",color:"#fff",borderRadius:5,padding:"3px 9px",cursor:"pointer",fontSize:12,fontWeight:600}}>✓</button>
+              <button onClick={()=>setNewSheetMode(false)} style={{border:"none",background:"#475569",color:"#fff",borderRadius:5,padding:"3px 9px",cursor:"pointer",fontSize:12}}>✕</button>
             </div>
           ) : (
-            <button onClick={function(){setNewSheetMode(true);}}
-              style={{border:"none",background:"transparent",color:"#475569",cursor:"pointer",fontSize:22,padding:"0 12px",fontWeight:300,lineHeight:1}}
-              onMouseEnter={function(e){e.currentTarget.style.color="#60A5FA";}} onMouseLeave={function(e){e.currentTarget.style.color="#475569";}}>+</button>
+            <button onClick={()=>setNewSheetMode(true)}
+              style={{border:"none",background:"transparent",color:"#475569",cursor:"pointer",fontSize:20,padding:"0 10px",fontWeight:300}}
+              onMouseEnter={e=>e.currentTarget.style.color="#60A5FA"} onMouseLeave={e=>e.currentTarget.style.color="#475569"}>+</button>
           )}
         </div>
       </div>
 
       {/* BODY */}
-      <div style={{display:"flex",flex:1,minHeight:0}}>
+      <div style={{display:"flex",flex:1,minHeight:0,overflow:"hidden"}}>
         {/* SIDEBAR */}
         {sidebarOpen && (
-          <div style={{width:240,background:"#0F172A",flexShrink:0,display:"flex",flexDirection:"column",borderRight:"1px solid #1E293B",animation:"slideLeft .2s ease"}}>
-            <div style={{padding:"16px 14px 10px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-              <span style={{fontSize:11,fontWeight:800,color:"#334155",textTransform:"uppercase",letterSpacing:".08em"}}>Projekty</span>
-              <button onClick={function(){setProjModal({});}} title="Nowy projekt"
-                style={{border:"none",background:"rgba(96,165,250,.12)",color:"#60A5FA",width:26,height:26,borderRadius:6,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}
-                onMouseEnter={function(e){e.currentTarget.style.background="rgba(96,165,250,.25)";}}
-                onMouseLeave={function(e){e.currentTarget.style.background="rgba(96,165,250,.12)";}}>+</button>
+          <div style={{width:230,background:"#0F172A",flexShrink:0,display:"flex",flexDirection:"column",borderRight:"1px solid #1E293B",overflow:"hidden"}}>
+            <div style={{padding:"14px 12px 8px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <span style={{fontSize:10,fontWeight:800,color:"#334155",textTransform:"uppercase",letterSpacing:".08em"}}>Projekty</span>
+              <button onClick={()=>setProjModal({})}
+                style={{border:"none",background:"rgba(96,165,250,.1)",color:"#60A5FA",width:24,height:24,borderRadius:5,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}
+                onMouseEnter={e=>e.currentTarget.style.background="rgba(96,165,250,.22)"}
+                onMouseLeave={e=>e.currentTarget.style.background="rgba(96,165,250,.1)"}>+</button>
             </div>
-            <div style={{flex:1,overflowY:"auto",padding:"0 8px 16px"}}>
-              {projects.map(function(p){
-                var isActive = p.id===activeProjId;
-                var totalRows = p.sheets.reduce(function(sum,s){return sum+s.rows.length;},0);
+            <div style={{flex:1,overflowY:"auto",padding:"0 7px 14px"}}>
+              {projects.map(p=>{
+                const isActive=p.id===activeProjId;
+                const totalRows=p.sheets.reduce((s,sh)=>s+sh.rows.length,0);
                 return (
-                  <div key={p.id} className="proj-item" onClick={function(){setActiveProjId(p.id);setActiveSheetId(p.sheets[0].id);}}
-                    style={{padding:"10px 12px",borderRadius:10,cursor:"pointer",marginBottom:4,
+                  <div key={p.id} onClick={()=>{setActiveProjId(p.id);setActiveSheetId(p.sheets[0].id);}}
+                    style={{padding:"9px 10px",borderRadius:9,cursor:"pointer",marginBottom:3,
                       background:isActive?"rgba(96,165,250,.1)":"transparent",
-                      border:"1px solid "+(isActive?"rgba(96,165,250,.2)":"transparent"),transition:"all .15s"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:9}}>
-                      <div style={{width:32,height:32,borderRadius:8,background:p.color+"22",border:"1.5px solid "+p.color+"55",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>
-                        {p.emoji}
-                      </div>
+                      border:`1px solid ${isActive?"rgba(96,165,250,.2)":"transparent"}`,transition:"all .15s"}}
+                    onMouseEnter={e=>{if(!isActive)e.currentTarget.style.background="rgba(255,255,255,.04)";}}
+                    onMouseLeave={e=>{if(!isActive)e.currentTarget.style.background="transparent";}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{width:30,height:30,borderRadius:7,background:p.color+"22",border:`1.5px solid ${p.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0}}>{p.emoji}</div>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{color:isActive?"#F8FAFC":"#94A3B8",fontWeight:isActive?700:500,fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
-                        <div style={{color:"#334155",fontSize:10,marginTop:2}}>{p.sheets.length} ark. · {totalRows} wierszy</div>
+                        <div style={{color:isActive?"#F1F5F9":"#94A3B8",fontWeight:isActive?700:400,fontSize:12,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
+                        <div style={{color:"#334155",fontSize:10,marginTop:1}}>{p.sheets.length} ark. · {totalRows} wierszy</div>
                       </div>
-                      <div style={{display:"flex",flexDirection:"column",gap:2,flexShrink:0}}>
-                        <button onClick={function(e){e.stopPropagation();setProjModal(p);}} style={{border:"none",background:"none",color:"#334155",cursor:"pointer",fontSize:10,padding:"1px 3px",borderRadius:3,lineHeight:1}}
-                          onMouseEnter={function(e){e.currentTarget.style.color="#60A5FA";}} onMouseLeave={function(e){e.currentTarget.style.color="#334155";}}>✏️</button>
-                        {projects.length>1 && <button onClick={function(e){e.stopPropagation();deleteProject(p.id);}} style={{border:"none",background:"none",color:"#334155",cursor:"pointer",fontSize:10,padding:"1px 3px",borderRadius:3,lineHeight:1}}
-                          onMouseEnter={function(e){e.currentTarget.style.color="#F87171";}} onMouseLeave={function(e){e.currentTarget.style.color="#334155";}}>🗑</button>}
+                      <div style={{display:"flex",gap:1,flexShrink:0}}>
+                        <button onClick={e=>{e.stopPropagation();setProjModal(p);}} style={{border:"none",background:"none",color:"#334155",cursor:"pointer",fontSize:10,padding:"1px",lineHeight:1}}
+                          onMouseEnter={e=>e.currentTarget.style.color="#60A5FA"} onMouseLeave={e=>e.currentTarget.style.color="#334155"}>✏️</button>
+                        {projects.length>1&&<button onClick={e=>{e.stopPropagation();const rest=projects.filter(x=>x.id!==p.id);setProjects(rest);if(activeProjId===p.id){setActiveProjId(rest[0].id);setActiveSheetId(rest[0].sheets[0].id);}}} style={{border:"none",background:"none",color:"#334155",cursor:"pointer",fontSize:10,padding:"1px",lineHeight:1}}
+                          onMouseEnter={e=>e.currentTarget.style.color="#F87171"} onMouseLeave={e=>e.currentTarget.style.color="#334155"}>🗑</button>}
                       </div>
                     </div>
                     {isActive && (
-                      <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid rgba(255,255,255,.05)"}}>
-                        {p.sheets.map(function(s){
-                          return (
-                            <div key={s.id} onClick={function(e){e.stopPropagation();setActiveSheetId(s.id);}}
-                              style={{display:"flex",alignItems:"center",gap:6,padding:"4px 6px",borderRadius:6,cursor:"pointer",marginBottom:2,
-                                background:activeSheetId===s.id?"rgba(96,165,250,.15)":"transparent"}}
-                              onMouseEnter={function(e){if(activeSheetId!==s.id)e.currentTarget.style.background="rgba(255,255,255,.04)";}}
-                              onMouseLeave={function(e){if(activeSheetId!==s.id)e.currentTarget.style.background="transparent";}}>
-                              <span style={{fontSize:11}}>{s.icon||"📄"}</span>
-                              <span style={{fontSize:12,color:activeSheetId===s.id?"#93C5FD":"#475569",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{s.name.replace(/^\S+\s/,"")}</span>
-                              <span style={{fontSize:10,color:"#334155",flexShrink:0}}>{s.rows.length}</span>
-                            </div>
-                          );
-                        })}
+                      <div style={{marginTop:7,paddingTop:7,borderTop:"1px solid rgba(255,255,255,.05)"}}>
+                        {p.sheets.map(s=>(
+                          <div key={s.id} onClick={e=>{e.stopPropagation();setActiveSheetId(s.id);}}
+                            style={{display:"flex",alignItems:"center",gap:5,padding:"3px 5px",borderRadius:5,cursor:"pointer",marginBottom:1,
+                              background:activeSheetId===s.id?"rgba(96,165,250,.15)":"transparent"}}
+                            onMouseEnter={e=>{if(activeSheetId!==s.id)e.currentTarget.style.background="rgba(255,255,255,.04)";}}
+                            onMouseLeave={e=>{if(activeSheetId!==s.id)e.currentTarget.style.background="transparent";}}>
+                            <span style={{fontSize:10}}>{s.icon||"📄"}</span>
+                            <span style={{fontSize:11,color:activeSheetId===s.id?"#93C5FD":"#475569",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name.replace(/^\S+\s/,"")}</span>
+                            <span style={{fontSize:10,color:"#334155"}}>{s.rows.length}</span>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
                 );
               })}
             </div>
-            <div style={{padding:"12px",borderTop:"1px solid #1E293B",fontSize:10,color:"#334155",lineHeight:1.6}}>
-              💡 Kliknij # wiersza → szczegóły<br/>
-              ✨ Import → wklej tekst z ChatGPT<br/>
+            <div style={{padding:"10px 12px",borderTop:"1px solid #1E293B",fontSize:10,color:"#334155",lineHeight:1.8}}>
+              💡 Kliknij <strong style={{color:"#475569"}}>#</strong> wiersza → szczegóły<br/>
+              ✨ <strong style={{color:"#475569"}}>Import</strong> → wklej tekst z ChatGPT<br/>
               ⧉ Duplikuj arkusz · + Nowy projekt
             </div>
           </div>
         )}
 
-        {/* MAIN CONTENT */}
-        <div style={{flex:1,overflowY:"auto",padding:"24px"}}>
+        {/* MAIN */}
+        <div style={{flex:1,overflowY:"auto",padding:"20px 22px"}}>
           {activeSheet && (
             <div key={activeSheet.id} style={{animation:"slideIn .2s ease"}}>
-              <div style={{marginBottom:20}}>
-                <h1 style={{fontSize:22,fontWeight:900,color:"#0F172A",letterSpacing:"-.5px",margin:0}}>{activeSheet.name}</h1>
-                <p style={{color:"#94A3B8",fontSize:12,margin:"5px 0 0"}}>
-                  Projekt: <strong style={{color:activeProj.color}}>{activeProj.emoji} {activeProj.name}</strong>
-                  &nbsp;·&nbsp;{activeSheet.rows.length} wierszy
-                  &nbsp;·&nbsp;Kliknij <strong>#</strong> wiersza → panel szczegółów
-                  &nbsp;·&nbsp;<strong>✨ Import</strong> → wklej tekst / plik
+              <div style={{marginBottom:16}}>
+                <h1 style={{fontSize:20,fontWeight:900,color:"#0F172A",margin:0}}>{activeSheet.name}</h1>
+                <p style={{color:"#94A3B8",fontSize:11,margin:"4px 0 0"}}>
+                  <span style={{color:activeProj.color,fontWeight:700}}>{activeProj.emoji} {activeProj.name}</span>
+                  {" · "}{activeSheet.rows.length} wierszy
+                  {" · "}Kliknij <strong>#</strong> → panel szczegółów
+                  {" · "}<strong>✨ Import</strong> → wklej tekst/plik
                 </p>
               </div>
               <SheetView sheet={activeSheet} onChange={updateSheet}/>
@@ -1473,8 +910,3 @@ function App() {
     </div>
   );
 }
-
-ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
-</script>
-</body>
-</html>
